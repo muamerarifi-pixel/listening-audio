@@ -605,7 +605,6 @@ Maya: Perfect, there we go. Thank you so much!`,
       return;
     }
 
-    // Exercise summary
     if (state.currentExerciseSummary) {
       exerciseSummaryText.textContent = state.currentExerciseSummary;
       exerciseSummaryText.classList.remove('hidden');
@@ -613,7 +612,6 @@ Maya: Perfect, there we go. Thank you so much!`,
       exerciseSummaryText.classList.add('hidden');
     }
 
-    // Answer items
     answerKeyList.innerHTML = '';
     state.currentAnswerKey.forEach(item => {
       const card = document.createElement('div');
@@ -628,7 +626,6 @@ Maya: Perfect, there we go. Thank you so much!`,
       answerKeyList.appendChild(card);
     });
 
-    // Teacher notes banner
     if (state.currentTeacherNotes) {
       teacherNotesBanner.innerHTML = `<strong>Teacher Note:</strong> ${escapeHtml(state.currentTeacherNotes)}`;
       teacherNotesBanner.classList.remove('hidden');
@@ -746,7 +743,7 @@ Maya: Perfect, there we go. Thank you so much!`,
     }
   }
 
-  // --- IMAGE OPTIMIZATION / RESIZING VIA CANVAS ---
+  // --- IMAGE OPTIMIZATION VIA CANVAS ---
   function optimizeImage(file, maxDimension = 1280) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -780,6 +777,349 @@ Maya: Perfect, there we go. Thank you so much!`,
     });
   }
 
+  // --- WAV STITCHER (Supports Any Number of Speakers) ---
+  function concatenateWavUint8Arrays(wavArrays, silenceSeconds = 1.2) {
+    if (!wavArrays || wavArrays.length === 0) return null;
+    if (wavArrays.length === 1) return wavArrays[0];
+
+    const first = wavArrays[0];
+    const view = new DataView(first.buffer, first.byteOffset, first.byteLength);
+
+    const numChannels = view.getUint16(22, true);
+    const sampleRate = view.getUint32(24, true);
+    const bitsPerSample = view.getUint16(34, true);
+    const bytesPerSample = (bitsPerSample / 8) * numChannels;
+
+    function getPcmData(arr) {
+      const v = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+      let offset = 12;
+      while (offset < arr.length - 8) {
+        const chunkId = String.fromCharCode(arr[offset], arr[offset+1], arr[offset+2], arr[offset+3]);
+        const chunkSize = v.getUint32(offset + 4, true);
+        if (chunkId === 'data') {
+          return arr.subarray(offset + 8, offset + 8 + chunkSize);
+        }
+        offset += 8 + chunkSize;
+      }
+      return arr.subarray(44);
+    }
+
+    const silenceSamples = Math.round(sampleRate * silenceSeconds);
+    const silenceBytes = new Uint8Array(silenceSamples * bytesPerSample);
+
+    const pcmList = [];
+    let totalPcmLen = 0;
+
+    for (let i = 0; i < wavArrays.length; i++) {
+      const pcm = getPcmData(wavArrays[i]);
+      pcmList.push(pcm);
+      totalPcmLen += pcm.length;
+      if (i < wavArrays.length - 1 && silenceSeconds > 0) {
+        pcmList.push(silenceBytes);
+        totalPcmLen += silenceBytes.length;
+      }
+    }
+
+    const headerBuf = new ArrayBuffer(44);
+    const hv = new DataView(headerBuf);
+    const hBytes = new Uint8Array(headerBuf);
+
+    function writeAscii(str, offset) {
+      for (let j = 0; j < str.length; j++) {
+        hBytes[offset + j] = str.charCodeAt(j);
+      }
+    }
+
+    writeAscii('RIFF', 0);
+    hv.setUint32(4, 36 + totalPcmLen, true);
+    writeAscii('WAVE', 8);
+    writeAscii('fmt ', 12);
+    hv.setUint32(16, 16, true);
+    hv.setUint16(20, 1, true);
+    hv.setUint16(22, numChannels, true);
+    hv.setUint32(24, sampleRate, true);
+    hv.setUint32(28, sampleRate * bytesPerSample, true);
+    hv.setUint16(32, bytesPerSample, true);
+    hv.setUint16(34, bitsPerSample, true);
+    writeAscii('data', 36);
+    hv.setUint32(40, totalPcmLen, true);
+
+    const out = new Uint8Array(44 + totalPcmLen);
+    out.set(hBytes, 0);
+    let cur = 44;
+    for (const part of pcmList) {
+      out.set(part, cur);
+      cur += part.length;
+    }
+    return out;
+  }
+
+  function uint8ArrayToBase64(uint8) {
+    let binary = '';
+    const len = uint8.byteLength;
+    const chunkSize = 8192;
+    for (let i = 0; i < len; i += chunkSize) {
+      const sub = uint8.subarray(i, Math.min(i + chunkSize, len));
+      binary += String.fromCharCode.apply(null, sub);
+    }
+    return btoa(binary);
+  }
+
+  function base64ToUint8Array(base64) {
+    const raw = atob(base64);
+    const len = raw.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = raw.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  // --- ADVANCED SCRIPT & ANSWER KEY PARSER ---
+  function parseInputScript(rawInput) {
+    let dialogueText = rawInput;
+    let answerKey = [];
+
+    // 1. Separate Answer Key block if present
+    const akRegex = /(?:^|\n)\s*(?:[*#\-_]{0,3})\s*Answer\s*Key\s*:?[\s*#\-_]*/i;
+    const akMatch = rawInput.match(akRegex);
+    if (akMatch) {
+      const splitIndex = akMatch.index;
+      dialogueText = rawInput.slice(0, splitIndex).trim();
+      const answerKeyBlock = rawInput.slice(splitIndex + akMatch[0].length).trim();
+      
+      const lines = answerKeyBlock.split('\n').map(l => l.trim()).filter(Boolean);
+      lines.forEach(line => {
+        const clean = line.replace(/^[\*\-\d\.\s]+/, '');
+        const colonIdx = clean.indexOf(':');
+        if (colonIdx !== -1) {
+          const item = clean.slice(0, colonIdx).replace(/[*_]/g, '').trim();
+          const ans = clean.slice(colonIdx + 1).replace(/[*]/g, '').trim();
+          answerKey.push({
+            item: item,
+            question: item,
+            answer: ans,
+            clue: ''
+          });
+        } else if (clean.length > 0) {
+          answerKey.push({
+            item: '',
+            question: '',
+            answer: clean.replace(/[*]/g, '').trim(),
+            clue: ''
+          });
+        }
+      });
+    }
+
+    // 2. Parse Dialogue sections (supports **Speaker 1**, Speaker 1:, or multi-line paragraphs)
+    const turns = [];
+    const lines = dialogueText.split('\n').map(l => l.trim());
+    let currentSpeaker = 'Speaker 1';
+    let currentParagraphs = [];
+
+    function commitTurn() {
+      if (currentParagraphs.length > 0) {
+        const cleanText = currentParagraphs.join(' ').replace(/[*_#]/g, '').trim();
+        if (cleanText) {
+          turns.push({
+            speaker: currentSpeaker,
+            text: cleanText
+          });
+        }
+        currentParagraphs = [];
+      }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line || line === '---' || line === '***' || line === '___') {
+        continue;
+      }
+
+      // Check if line is a speaker header: **Speaker 1**, # Speaker 1, Speaker 1:, [Speaker 1]
+      const headerMatch = line.match(/^(?:[*#\-_\[\s]{0,3})\s*(Speaker\s*\d+|Narrator|[A-Z][a-zA-Z0-9_\s]{1,24})\s*(?:[*#\-_\]\s]{0,3}):?\s*(.*)$/i);
+      
+      if (headerMatch && (!headerMatch[2] || headerMatch[2].length < 60)) {
+        commitTurn();
+        currentSpeaker = headerMatch[1].replace(/[*_]/g, '').trim();
+        if (headerMatch[2]) {
+          currentParagraphs.push(headerMatch[2]);
+        }
+      } else {
+        currentParagraphs.push(line);
+      }
+    }
+    commitTurn();
+
+    return { turns, answerKey };
+  }
+
+  // --- GEMINI 3.8 TTS SYNTHESIS ENGINE (1, 2, or Any Number of Speakers) ---
+  async function callGeminiTts(turns, styleDirection) {
+    const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
+    const voice1 = voice1Select.value;
+    const voice2 = voice2Select.value;
+    const voice3 = voice3Select.value;
+    const voiceChoices = [voice1, voice2, voice3, 'Fenrir', 'Zephyr', 'Kore', 'Puck', 'Aoede', 'Charon'];
+    const model = ttsModelSelect.value || 'gemini-3.8-flash-tts';
+
+    // Helper: Single speaker API request
+    async function requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel) {
+      const payload = {
+        model: model,
+        input: [
+          {
+            type: 'user_input',
+            content: [
+              {
+                type: 'text',
+                text: textToSpeak,
+                annotations: [
+                  {
+                    type: 'speech_metadata',
+                    speaker: speakerLabel,
+                    style: styleDirection || 'Clear enunciation for ESL learners'
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        response_format: { type: 'audio' },
+        generation_config: {
+          speech_config: {
+            voice: voiceName
+          }
+        }
+      };
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const responseData = await res.json();
+      return extractAudioBase64(responseData);
+    }
+
+    function extractAudioBase64(responseData) {
+      if (responseData.output_audio && responseData.output_audio.data) {
+        return responseData.output_audio.data;
+      }
+      if (Array.isArray(responseData.steps)) {
+        for (const step of responseData.steps) {
+          if (step.type === 'model_output' && Array.isArray(step.content)) {
+            for (const item of step.content) {
+              if (item.type === 'audio' && item.data) {
+                return item.data;
+              }
+            }
+          }
+        }
+      }
+      throw new Error('Gemini TTS returned no audio data.');
+    }
+
+    // CASE 1: Single Speaker
+    if (uniqueSpeakers.length === 1) {
+      const fullText = turns.map(t => t.text).join('\n\n');
+      const voice = voiceChoices[0];
+      setGenerationStatus(`Synthesizing monologue with voice: ${voice}...`);
+      const b64 = await requestSingleSpeakerAudio(fullText, voice, uniqueSpeakers[0]);
+      const bytes = base64ToUint8Array(b64);
+      const blob = new Blob([bytes], { type: 'audio/wav' });
+      return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+    }
+
+    // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request)
+    if (uniqueSpeakers.length === 2) {
+      setGenerationStatus(`Synthesizing 2-speaker dialogue with ${voiceChoices[0]} and ${voiceChoices[1]}...`);
+      const speakerConfigs = [
+        { speaker: uniqueSpeakers[0], voice: voiceChoices[0] },
+        { speaker: uniqueSpeakers[1], voice: voiceChoices[1] }
+      ];
+
+      const contentItems = turns.map(t => ({
+        type: 'text',
+        text: t.text,
+        annotations: [
+          {
+            type: 'speech_metadata',
+            speaker: t.speaker,
+            style: styleDirection || 'Clear enunciation for ESL learners'
+          }
+        ]
+      }));
+
+      const payload = {
+        model: model,
+        input: [
+          {
+            type: 'user_input',
+            content: contentItems
+          }
+        ],
+        response_format: { type: 'audio' },
+        generation_config: {
+          speech_config: {
+            speakers: speakerConfigs
+          }
+        }
+      };
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const responseData = await res.json();
+      const b64 = extractAudioBase64(responseData);
+      const bytes = base64ToUint8Array(b64);
+      const blob = new Blob([bytes], { type: 'audio/wav' });
+      return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+    }
+
+    // CASE 3: 3 or More Speakers (e.g. 4 Exam Speakers!)
+    // Synthesize each speaker individually and stitch WAV buffers with a 1.2s exam pause
+    setGenerationStatus(`Synthesizing ${uniqueSpeakers.length} distinct speakers...`);
+    const wavBuffers = [];
+
+    // Group consecutive turns by speaker or synthesize each turn
+    for (let i = 0; i < turns.length; i++) {
+      const turn = turns[i];
+      const spkIdx = uniqueSpeakers.indexOf(turn.speaker);
+      const voice = voiceChoices[spkIdx >= 0 ? spkIdx % voiceChoices.length : 0];
+
+      setGenerating(true, `Synthesizing ${turn.speaker} (${i + 1}/${turns.length}) with voice: ${voice}...`);
+      const b64 = await requestSingleSpeakerAudio(turn.text, voice, turn.speaker);
+      wavBuffers.push(base64ToUint8Array(b64));
+    }
+
+    setGenerating(true, 'Stitching audio tracks with exam pauses...');
+    const combinedUint8 = concatenateWavUint8Arrays(wavBuffers, 1.2);
+    const finalBase64 = uint8ArrayToBase64(combinedUint8);
+    const blob = new Blob([combinedUint8], { type: 'audio/wav' });
+
+    return {
+      blob,
+      objectUrl: URL.createObjectURL(blob),
+      base64: finalBase64
+    };
+  }
+
   // --- MULTIMODAL: PHOTO TO DIALOGUE + ANSWER KEY ---
   async function generateFromPhotoWithAI(imageFile) {
     if (!state.apiKey) {
@@ -793,7 +1133,6 @@ Maya: Perfect, there we go. Thank you so much!`,
     setGenerationStatus('Gemini Vision is analyzing questions, gaps, and context...');
 
     try {
-      // 1. Optimize image
       const resizedDataUrl = await optimizeImage(imageFile, 1280);
       const base64Data = resizedDataUrl.split(',')[1];
       state.currentImageBase64 = resizedDataUrl;
@@ -810,7 +1149,7 @@ ${userFocus ? `Specific Exercise Focus: ${userFocus}` : ''}
 
 Instructions:
 1. Examine the page for the listening activity, exercise prompt (e.g., "Listen and tick", "Listen and match", "Listen and fill in the blanks / write a or an / food words").
-2. Write a natural, highly engaging listening dialogue between 2 to 3 characters (or 1 narrator) designed for this exercise.
+2. Write a natural, highly engaging listening dialogue between 2 to 4 characters (or 1 narrator) designed for this exercise.
    - The dialogue MUST speak naturally and give the exact clues needed to answer the questions or fill in the blanks on this page!
    - Format dialogue strictly as turns: "Speaker: Line". No stage directions in parentheses.
 3. Solve the exercise and generate the Answer Key for every question/gap/item on the page.
@@ -834,7 +1173,6 @@ Return strictly a valid JSON object matching this schema:
   "teacherNotes": "Tip for classroom implementation"
 }`;
 
-      // Call Gemini 3.8 Flash for Multimodal understanding + JSON output
       const visionRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -872,11 +1210,9 @@ Return strictly a valid JSON object matching this schema:
       setGenerating(true, 'Step 2/3: Synthesizing voices with Gemini 3.8 TTS...');
       setGenerationStatus('Generating audio with natural pauses and pronunciation...');
 
-      // 2. Synthesize audio with Gemini 3.8 TTS
       const turns = analysis.dialogueTurns;
       const audioResult = await callGeminiTts(turns, deliveryStyleInput.value.trim());
 
-      // 3. Update State
       state.currentTrackTitle = analysis.title || 'Textbook Exercise Listening';
       state.currentTrackSubtitle = analysis.subtitle || `${gradeLevel}`;
       state.currentExerciseSummary = analysis.exerciseSummary || '';
@@ -887,7 +1223,6 @@ Return strictly a valid JSON object matching this schema:
       state.audioBlob = audioResult.blob;
       state.audioUrl = audioResult.objectUrl;
 
-      // Update UI
       trackTitleDisplay.textContent = state.currentTrackTitle;
       trackSubtitleDisplay.textContent = state.currentTrackSubtitle;
       renderTranscript();
@@ -896,7 +1231,6 @@ Return strictly a valid JSON object matching this schema:
       closeModal();
       loadAudioTrack(audioResult.objectUrl, true);
 
-      // 4. Save to Cloudflare KV
       if (saveToCloudflareCheckbox.checked) {
         const trackId = 'track_' + Date.now();
         saveTrackToCloudflare({
@@ -920,127 +1254,6 @@ Return strictly a valid JSON object matching this schema:
     } finally {
       setGenerating(false);
     }
-  }
-
-  // --- GEMINI 3.8 TTS SYNTHESIS HELPER ---
-  async function callGeminiTts(turns, styleDirection) {
-    const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
-    const voice1 = voice1Select.value;
-    const voice2 = voice2Select.value;
-    const voice3 = voice3Select.value;
-    const voiceChoices = [voice1, voice2, voice3, 'Zephyr', 'Fenrir', 'Charon'];
-
-    const speakerConfigs = uniqueSpeakers.map((spk, i) => {
-      return {
-        speaker: spk,
-        voice: voiceChoices[i % voiceChoices.length]
-      };
-    });
-
-    const model = ttsModelSelect.value || 'gemini-3.8-flash-tts';
-
-    const contentItems = turns.map(t => {
-      return {
-        type: 'text',
-        text: t.text,
-        annotations: [
-          {
-            type: 'speech_metadata',
-            speaker: t.speaker,
-            style: styleDirection || 'Clear enunciation for ESL learners'
-          }
-        ]
-      };
-    });
-
-    const payload = {
-      model: model,
-      input: [
-        {
-          type: 'user_input',
-          content: contentItems
-        }
-      ],
-      response_format: { type: 'audio' },
-      generation_config: {
-        speech_config: {
-          speakers: speakerConfigs
-        }
-      }
-    };
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
-    }
-
-    const responseData = await res.json();
-    let base64Audio = null;
-
-    if (responseData.output_audio && responseData.output_audio.data) {
-      base64Audio = responseData.output_audio.data;
-    } else if (Array.isArray(responseData.steps)) {
-      for (const step of responseData.steps) {
-        if (step.type === 'model_output' && Array.isArray(step.content)) {
-          for (const item of step.content) {
-            if (item.type === 'audio' && item.data) {
-              base64Audio = item.data;
-              break;
-            }
-          }
-        }
-        if (base64Audio) break;
-      }
-    }
-
-    if (!base64Audio) {
-      throw new Error('Gemini TTS returned no audio data. Check your model quota.');
-    }
-
-    const byteCharacters = atob(base64Audio);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'audio/wav' });
-    const objectUrl = URL.createObjectURL(blob);
-
-    return {
-      blob,
-      objectUrl,
-      base64: base64Audio
-    };
-  }
-
-  // --- SCRIPT PARSER ---
-  function parseScriptToTurns(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const turns = [];
-
-    lines.forEach(line => {
-      const match = line.match(/^([A-Za-z0-9_\s]{1,24}):\s*(.+)$/);
-      if (match) {
-        turns.push({
-          speaker: match[1].trim(),
-          text: match[2].trim()
-        });
-      } else {
-        const prevSpeaker = turns.length > 0 ? turns[turns.length - 1].speaker : 'Narrator';
-        turns.push({
-          speaker: prevSpeaker,
-          text: line
-        });
-      }
-    });
-
-    return turns;
   }
 
   // --- GEMINI PROMPT TO SCRIPT DRAFTER ---
@@ -1111,19 +1324,19 @@ Return strictly valid JSON:
 
   // --- GENERAL GENERATE ACTION DISPATCHER ---
   async function handleGenerateAudioAction() {
-    // If in photo tab and image is attached, run full multimodal pipeline
+    // 1. If in photo tab and image is attached, run multimodal pipeline
     if (state.activeTab === 'photoTab' && currentUploadedImageFile) {
       await generateFromPhotoWithAI(currentUploadedImageFile);
       return;
     }
 
-    // Otherwise, generate from script text
-    const scriptText = scriptTextInput.value.trim();
-    if (!scriptText) {
+    // 2. Otherwise parse script text (with automatic Answer Key extraction!)
+    const rawInput = scriptTextInput.value.trim();
+    if (!rawInput) {
       if (state.activeTab === 'photoTab') {
         alert('Please attach an exercise photo or switch to the Script tab to paste text.');
       } else {
-        alert('Please enter or draft dialogue text before generating.');
+        alert('Please enter or paste dialogue text before generating.');
       }
       return;
     }
@@ -1141,10 +1354,18 @@ Return strictly valid JSON:
       return;
     }
 
-    const turns = parseScriptToTurns(scriptText);
+    // Use advanced parser
+    const { turns, answerKey } = parseInputScript(rawInput);
+
     if (turns.length === 0) {
       alert('Could not parse any dialogue turns.');
       return;
+    }
+
+    // If answer key was found in text, save it into state!
+    if (answerKey.length > 0) {
+      state.currentAnswerKey = answerKey;
+      renderAnswerKey();
     }
 
     setGenerating(true, 'Synthesizing audio with Gemini 3.8 TTS...');
@@ -1158,8 +1379,8 @@ Return strictly valid JSON:
       let trackTitle = '';
       let trackSubtitle = '';
       if (uniqueSpeakers.length > 1) {
-        trackTitle = `${uniqueSpeakers.join(' & ')}: Listening Dialogue`;
-        trackSubtitle = `${uniqueSpeakers.join(' • ')} • Cambridge ESL`;
+        trackTitle = `${uniqueSpeakers.join(' & ')}: Listening Task`;
+        trackSubtitle = `${uniqueSpeakers.length} Speakers • Cambridge ESL`;
       } else {
         trackTitle = `${uniqueSpeakers[0] || 'Narration'}: Listening Audio`;
         trackSubtitle = `Voice Narration • ${styleDirection}`;
@@ -1185,7 +1406,7 @@ Return strictly valid JSON:
           id: trackId,
           title: trackTitle,
           subtitle: trackSubtitle,
-          exerciseSummary: state.currentExerciseSummary,
+          exerciseSummary: state.currentExerciseSummary || `${uniqueSpeakers.length} Speaker Listening Activity`,
           style: styleDirection,
           transcript: turns,
           answerKey: state.currentAnswerKey,
@@ -1197,6 +1418,7 @@ Return strictly valid JSON:
     } catch (err) {
       console.error(err);
       setGenerationStatus(`Error: ${err.message}`, true);
+      alert('Error generating audio: ' + err.message);
     } finally {
       setGenerating(false);
     }
