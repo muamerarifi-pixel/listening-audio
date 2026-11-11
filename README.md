@@ -1,39 +1,73 @@
-# Listening Audio Studio (Gemini TTS)
+# Listening Audio Studio (Gemini 3.8 TTS & Cloudflare KV)
 
-A fast, distraction-free listening audio site designed specifically for language learning and listening practice. Powered by Google Gemini 3.8 TTS.
+A fast, distraction-free listening audio site designed specifically for language learning, ESL classes, and listening practice. Powered by Google Gemini 3.8 TTS and Cloudflare Workers KV storage.
+
+**Live Site:** [https://listening-audio.muamer-arifi.workers.dev](https://listening-audio.muamer-arifi.workers.dev)  
+**GitHub Repo:** [https://github.com/muamerarifi-pixel/listening-audio](https://github.com/muamerarifi-pixel/listening-audio)
+
+---
 
 ## Features
 
-- **Distraction-Free Listening Player:** No visual clutter during listening sessions. Focus entirely on comprehension.
-- **Teacher & Student Audio Controls:**
-  - `⏪ -5s` and `+5s ⏩` instant jump buttons (crucial for ESL listening exercises).
-  - Quick speed toggle (`0.8×` ESL learner mode, `1.0×` normal, `1.2×` advanced).
-  - Continuous loop toggle for repetitive drills.
-  - One-click WAV audio download.
-  - Real-time animated audio visualizer.
-- **Multiple Input Modes:**
-  - **Script / Dialogue Mode:** Supports single speaker, 2 speakers, or 3+ speakers formatted as `Speaker: Line`.
-  - **AI Prompt-to-Script:** Type a topic or level prompt (e.g. *"Grade 2 lunchbox dialogue with Mia and Leo"*), and Gemini drafts the script for you.
-  - **Book Photo / OCR:** Drag & drop a photo of a textbook page or exercise, and Gemini Vision extracts dialogue lines automatically.
-- **Gemini 3.8 TTS Engine:**
-  - Integrates `gemini-3.8-flash-tts` and `gemini-3.8-flash-lite-tts`.
-  - Distinct voice assignments: `Puck` (warm male), `Aoede` (breezy female), `Kore` (gentle female), `Fenrir` (deep male), `Charon` (authoritative narrator).
-  - Custom delivery style prompts (e.g. *"Clear enunciation for Cambridge Grade 2 learners"*).
+- **Distraction-Free Listening Player (Zero Visual Clutter):**
+  - Clean waveform canvas visualization with real-time responsive animation.
+  - Large focal playback controls with keyboard navigation.
+  - **-5s / +5s Instant Jump Buttons:** Crucial for classroom listening drills and student repetition.
+  - **Speed Selector:** `0.8×` (slow & clear for primary ESL learners), `1.0×` (natural), `1.2×` (advanced).
+  - Loop / repeat toggle & direct WAV download.
+  - Collapsible transcript peek with color-coded speaker badges.
+
+- **Cloudflare KV Persistent Audio Storage:**
+  - Automatically saves generated listening tracks to Cloudflare KV (`LISTENING_DATA`).
+  - Saved Tracks Library drawer to browse, replay, or delete past tracks.
+  - Efficient binary audio streaming with HTTP byte-range request support.
+
+- **Flexible Input Modes (Gemini 3.8):**
+  - **Script / Dialogue Mode:** Supports single speaker, 2 speakers, or 3+ speakers (`Speaker: Line`).
+  - **AI Prompt-to-Script:** Type a topic or level prompt, and Gemini drafts an age-appropriate dialogue.
+  - **Book Photo / OCR:** Drag & drop a photo of a textbook page, and Gemini extracts dialogue lines automatically.
+  - **Voice Customization:** Assign distinct Gemini voices (`Puck`, `Aoede`, `Kore`, `Fenrir`, `Charon`) with custom delivery style prompts.
+
 - **Keyboard Shortcuts:**
   - <kbd>Space</kbd>: Play / Pause
   - <kbd>←</kbd> / <kbd>→</kbd>: Jump ±5 seconds
   - <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd>: Set speed to 0.8×, 1.0×, or 1.2×
   - <kbd>N</kbd>: Open New Audio generation drawer
-  - <kbd>Esc</kbd>: Close drawer
+  - <kbd>L</kbd>: Open Saved Tracks Library
+  - <kbd>Esc</kbd>: Close drawer / modal
 
-## Quick Start
+---
 
-### Option 1: Native Node.js Server (Recommended)
+## Deploying
+
+This project is deployed directly with Wrangler:
+
+```bash
+# Install dependencies
+npm install
+
+# Test locally with Wrangler
+npx wrangler dev
+
+# Deploy to Cloudflare Workers
+npx wrangler deploy
+```
+
+### Cloudflare Bindings
+
+- **Static Assets:** Serves `public/` (cached at the edge).
+- **KV Namespace:** `LISTENING_DATA` (`7049800c549243ff9652235169b1649b`)
+  - `tracks_index`: JSON array of latest track metadata.
+  - `track:<id>`: Metadata and full transcript for track `<id>`.
+  - `audio:<id>`: Raw binary WAV audio buffer.
+
+---
+
+## Local Development (Zero Dependencies)
+
+You can also run the bundled native Node.js server:
+
 ```powershell
-cd C:\Users\Asus\.gemini\antigravity\scratch\listening-audio
 node server.js
 ```
-Then open `http://127.0.0.1:3000` in your browser.
-
-### Option 2: Direct File Open
-You can also open `index.html` directly in Edge or Chrome.
+Then open `http://127.0.0.1:3000`.
