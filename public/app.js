@@ -966,30 +966,39 @@ Maya: Perfect, there we go. Thank you so much!`,
 
     // Helper: Single speaker API request
     async function requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel) {
+      const annotations = [];
+      const cleanStyle = (styleDirection || '').trim();
+      if (cleanStyle) {
+        annotations.push({
+          type: 'speech_metadata',
+          style: cleanStyle
+        });
+      }
+
+      const contentItem = {
+        type: 'text',
+        text: textToSpeak
+      };
+      if (annotations.length > 0) {
+        contentItem.annotations = annotations;
+      }
+
       const payload = {
         model: model,
         input: [
           {
             type: 'user_input',
-            content: [
-              {
-                type: 'text',
-                text: textToSpeak,
-                annotations: [
-                  {
-                    type: 'speech_metadata',
-                    speaker: speakerLabel,
-                    style: styleDirection || 'Clear enunciation for ESL learners'
-                  }
-                ]
-              }
-            ]
+            content: [contentItem]
           }
         ],
         response_format: { type: 'audio' },
         generation_config: {
           speech_config: {
-            voice: voiceName
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: voiceName
+              }
+            }
           }
         }
       };
@@ -1024,6 +1033,16 @@ Maya: Perfect, there we go. Thank you so much!`,
           }
         }
       }
+      if (Array.isArray(responseData.candidates) && responseData.candidates[0]?.content?.parts) {
+        for (const part of responseData.candidates[0].content.parts) {
+          if (part.inline_data && part.inline_data.data) {
+            return part.inline_data.data;
+          }
+          if (part.inlineData && part.inlineData.data) {
+            return part.inlineData.data;
+          }
+        }
+      }
       throw new Error('Gemini TTS returned no audio data.');
     }
 
@@ -1038,58 +1057,64 @@ Maya: Perfect, there we go. Thank you so much!`,
       return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
     }
 
-    // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request)
+    // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request with fallback)
     if (uniqueSpeakers.length === 2) {
-      setGenerationStatus(`Synthesizing 2-speaker dialogue with ${voiceChoices[0]} and ${voiceChoices[1]}...`);
-      const speakerConfigs = [
-        { speaker: uniqueSpeakers[0], voice: voiceChoices[0] },
-        { speaker: uniqueSpeakers[1], voice: voiceChoices[1] }
-      ];
+      try {
+        setGenerationStatus(`Synthesizing 2-speaker dialogue with ${voiceChoices[0]} and ${voiceChoices[1]}...`);
+        const speakerConfigs = [
+          { speaker: uniqueSpeakers[0], voice: voiceChoices[0] },
+          { speaker: uniqueSpeakers[1], voice: voiceChoices[1] }
+        ];
 
-      const contentItems = turns.map(t => ({
-        type: 'text',
-        text: t.text,
-        annotations: [
-          {
-            type: 'speech_metadata',
-            speaker: t.speaker,
-            style: styleDirection || 'Clear enunciation for ESL learners'
-          }
-        ]
-      }));
+        const contentItems = turns.map(t => ({
+          type: 'text',
+          text: t.text,
+          annotations: [
+            {
+              type: 'speech_metadata',
+              speaker: t.speaker,
+              style: styleDirection || 'Clear enunciation for ESL learners'
+            }
+          ]
+        }));
 
-      const payload = {
-        model: model,
-        input: [
-          {
-            type: 'user_input',
-            content: contentItems
+        const payload = {
+          model: model,
+          input: [
+            {
+              type: 'user_input',
+              content: contentItems
+            }
+          ],
+          response_format: { type: 'audio' },
+          generation_config: {
+            speech_config: {
+              speakers: speakerConfigs
+            }
           }
-        ],
-        response_format: { type: 'audio' },
-        generation_config: {
-          speech_config: {
-            speakers: speakerConfigs
-          }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
         }
-      };
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
+        const responseData = await res.json();
+        const b64 = extractAudioBase64(responseData);
+        const bytes = base64ToUint8Array(b64);
+        const blob = new Blob([bytes], { type: 'audio/wav' });
+        return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+      } catch (err2Spk) {
+        console.warn('Native 2-speaker dialogue call failed, falling back to multi-track stitching:', err2Spk);
+        setGenerationStatus('Switching to multi-track audio stitching...');
+        // Fall through to CASE 3!
       }
-
-      const responseData = await res.json();
-      const b64 = extractAudioBase64(responseData);
-      const bytes = base64ToUint8Array(b64);
-      const blob = new Blob([bytes], { type: 'audio/wav' });
-      return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
     }
 
     // CASE 3: 3 or More Speakers (e.g. 4 Exam Speakers!)
