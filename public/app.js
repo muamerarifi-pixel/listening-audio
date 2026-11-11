@@ -97,21 +97,6 @@ Maya: Perfect, there we go. Thank you so much!`,
   const transcriptBox = document.getElementById('transcriptBox');
   const transcriptContent = document.getElementById('transcriptContent');
   
-  // Teacher Answer Key & Image Lightbox Elements
-  const toggleAnswerKeyBtn = document.getElementById('toggleAnswerKeyBtn');
-  const closeAnswerKeyBtn = document.getElementById('closeAnswerKeyBtn');
-  const copyAnswerKeyBtn = document.getElementById('copyAnswerKeyBtn');
-  const answerKeyBox = document.getElementById('answerKeyBox');
-  const answerKeyBadge = document.getElementById('answerKeyBadge');
-  const answerKeyList = document.getElementById('answerKeyList');
-  const exerciseSummaryText = document.getElementById('exerciseSummaryText');
-  const teacherNotesBanner = document.getElementById('teacherNotesBanner');
-  
-  const viewPageBtn = document.getElementById('viewPageBtn');
-  const lightboxModal = document.getElementById('lightboxModal');
-  const closeLightboxBtn = document.getElementById('closeLightboxBtn');
-  const lightboxImg = document.getElementById('lightboxImg');
-
   const timelineBar = document.getElementById('timelineBar');
   const timelineProgress = document.getElementById('timelineProgress');
   const timelineHandle = document.getElementById('timelineHandle');
@@ -143,23 +128,9 @@ Maya: Perfect, there we go. Thank you so much!`,
   const creatorModal = document.getElementById('creatorModal');
   const closeModalBtn = document.getElementById('closeModalBtn');
   const cancelModalBtn = document.getElementById('cancelModalBtn');
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabPanes = document.querySelectorAll('.tab-pane');
   
-  // Photo Tab Elements
-  const bookImageInput = document.getElementById('bookImageInput');
-  const uploadDropzone = document.getElementById('uploadDropzone');
-  const dropzoneEmptyView = document.getElementById('dropzoneEmptyView');
-  const imagePreviewArea = document.getElementById('imagePreviewArea');
-  const imagePreviewImg = document.getElementById('imagePreviewImg');
-  const removeImageBtn = document.getElementById('removeImageBtn');
-  const gradeLevelSelect = document.getElementById('gradeLevelSelect');
-  const exerciseFocusInput = document.getElementById('exerciseFocusInput');
-
-  // Text & Prompt Tab Elements
+  // Dialogue Script & Voice Configuration Elements
   const scriptTextInput = document.getElementById('scriptTextInput');
-  const aiPromptInput = document.getElementById('aiPromptInput');
-  const generateScriptDraftBtn = document.getElementById('generateScriptDraftBtn');
   
   const voice1Select = document.getElementById('voice1Select');
   const voice2Select = document.getElementById('voice2Select');
@@ -606,76 +577,10 @@ Maya: Perfect, there we go. Thank you so much!`,
     });
   }
 
-  // --- TEACHER ANSWER KEY RENDERING ---
-  function renderAnswerKey() {
-    const hasKeys = Array.isArray(state.currentAnswerKey) && state.currentAnswerKey.length > 0;
-    
-    if (hasKeys) {
-      toggleAnswerKeyBtn.classList.remove('hidden');
-      answerKeyBadge.textContent = `Answers (${state.currentAnswerKey.length})`;
-    } else {
-      toggleAnswerKeyBtn.classList.add('hidden');
-      answerKeyBox.classList.add('hidden');
-      return;
-    }
-
-    if (state.currentExerciseSummary) {
-      exerciseSummaryText.textContent = state.currentExerciseSummary;
-      exerciseSummaryText.classList.remove('hidden');
-    } else {
-      exerciseSummaryText.classList.add('hidden');
-    }
-
-    answerKeyList.innerHTML = '';
-    state.currentAnswerKey.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'answer-item';
-      card.innerHTML = `
-        <div class="answer-item-header">
-          <span class="answer-item-q">${escapeHtml(item.item ? `${item.item}. ` : '')}${escapeHtml(item.question || '')}</span>
-          <span class="answer-item-ans">${escapeHtml(item.answer || '')}</span>
-        </div>
-        ${item.clue ? `<div class="answer-item-clue">💡 Clue: "${escapeHtml(item.clue)}"</div>` : ''}
-      `;
-      answerKeyList.appendChild(card);
-    });
-
-    if (state.currentTeacherNotes) {
-      teacherNotesBanner.innerHTML = `<strong>Teacher Note:</strong> ${escapeHtml(state.currentTeacherNotes)}`;
-      teacherNotesBanner.classList.remove('hidden');
-    } else {
-      teacherNotesBanner.classList.add('hidden');
-    }
-  }
-
-  function copyAnswerKeyToClipboard() {
-    if (!state.currentAnswerKey || state.currentAnswerKey.length === 0) return;
-    
-    let text = `${state.currentTrackTitle}\n${state.currentExerciseSummary || ''}\n\n=== ANSWER KEY ===\n`;
-    state.currentAnswerKey.forEach(item => {
-      text += `${item.item ? `${item.item}. ` : ''}${item.question} -> ${item.answer}\n`;
-      if (item.clue) text += `   (Clue: ${item.clue})\n`;
-    });
-    if (state.currentTeacherNotes) {
-      text += `\nTeacher Note: ${state.currentTeacherNotes}\n`;
-    }
-
-    navigator.clipboard.writeText(text).then(() => {
-      copyAnswerKeyBtn.textContent = 'Copied!';
-      setTimeout(() => copyAnswerKeyBtn.textContent = 'Copy', 2000);
-    }).catch(err => {
-      alert('Could not copy to clipboard: ' + err.message);
-    });
-  }
-
-  function updateViewPageButton() {
-    if (state.currentImageUrl) {
-      viewPageBtn.classList.remove('hidden');
-      lightboxImg.src = state.currentImageUrl;
-    } else {
-      viewPageBtn.classList.add('hidden');
-    }
-  }
+  // --- CLEAN UI HELPERS ---
+  function renderAnswerKey() {}
+  function copyAnswerKeyToClipboard() {}
+  function updateViewPageButton() {}
 
   function escapeHtml(str) {
     return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -688,12 +593,7 @@ Maya: Perfect, there we go. Thank you so much!`,
 
     scriptTextInput.value = p.script;
     deliveryStyleInput.value = p.style;
-    state.currentAnswerKey = p.answerKey || [];
-    state.currentTeacherNotes = p.teacherNotes || '';
-    state.currentExerciseSummary = p.exerciseSummary || '';
-    renderAnswerKey();
-    switchTab('scriptTab');
-    setGenerationStatus(`Loaded "${p.title}" preset with answer key.`);
+    setGenerationStatus(`Loaded "${p.title}" preset.`);
   }
 
   // --- MODAL / DRAWER MANAGEMENT ---
@@ -715,15 +615,7 @@ Maya: Perfect, there we go. Thank you so much!`,
     libraryModal.classList.add('hidden');
   }
 
-  function switchTab(tabId) {
-    state.activeTab = tabId;
-    tabBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabId);
-    });
-    tabPanes.forEach(pane => {
-      pane.classList.toggle('hidden', pane.id !== tabId);
-    });
-  }
+  function switchTab(tabId) {}
 
   function loadSavedSettings() {
     if (state.apiKey) {
@@ -1404,20 +1296,10 @@ Return strictly valid JSON:
 
   // --- GENERAL GENERATE ACTION DISPATCHER ---
   async function handleGenerateAudioAction() {
-    // 1. If in photo tab and image is attached, run multimodal pipeline
-    if (state.activeTab === 'photoTab' && currentUploadedImageFile) {
-      await generateFromPhotoWithAI(currentUploadedImageFile);
-      return;
-    }
-
-    // 2. Otherwise parse script text (with automatic Answer Key extraction!)
     const rawInput = scriptTextInput.value.trim();
     if (!rawInput) {
-      if (state.activeTab === 'photoTab') {
-        alert('Please attach an exercise photo or switch to the Script tab to paste text.');
-      } else {
-        alert('Please enter or paste dialogue text before generating.');
-      }
+      alert('Please enter or paste dialogue text before generating.');
+      scriptTextInput.focus();
       return;
     }
 
@@ -1428,24 +1310,17 @@ Return strictly valid JSON:
         loadAudioTrack('sample.wav', true);
         return;
       }
-      switchTab('scriptTab');
       document.querySelector('.settings-accordion').open = true;
       apiKeyInput.focus();
       return;
     }
 
     // Use advanced parser
-    const { turns, answerKey } = parseInputScript(rawInput);
+    const { turns } = parseInputScript(rawInput);
 
     if (turns.length === 0) {
       alert('Could not parse any dialogue turns.');
       return;
-    }
-
-    // If answer key was found in text, save it into state!
-    if (answerKey.length > 0) {
-      state.currentAnswerKey = answerKey;
-      renderAnswerKey();
     }
 
     setGenerating(true, 'Synthesizing audio with Gemini 3.8 TTS...');
@@ -1611,11 +1486,6 @@ Return strictly valid JSON:
       toggleTranscriptBtn.classList.remove('active');
     });
 
-    // Modal Tabs
-    tabBtns.forEach(btn => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-    });
-
     // Presets
     document.querySelectorAll('.preset-chip').forEach(chip => {
       chip.addEventListener('click', () => loadPreset(chip.dataset.preset));
@@ -1626,52 +1496,6 @@ Return strictly valid JSON:
     apiKeyInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') saveApiKey();
     });
-
-    // Draft script with AI
-    generateScriptDraftBtn.addEventListener('click', draftScriptWithAI);
-
-    // Book Photo Upload / OCR
-    uploadDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadDropzone.style.borderColor = 'var(--accent)';
-    });
-
-    uploadDropzone.addEventListener('dragleave', () => {
-      uploadDropzone.style.borderColor = 'var(--surface-border)';
-    });
-
-    uploadDropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadDropzone.style.borderColor = 'var(--surface-border)';
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleSelectedImage(e.dataTransfer.files[0]);
-      }
-    });
-
-    bookImageInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        handleSelectedImage(e.target.files[0]);
-      }
-    });
-
-    removeImageBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      currentUploadedImageFile = null;
-      bookImageInput.value = '';
-      imagePreviewArea.classList.add('hidden');
-      dropzoneEmptyView.classList.remove('hidden');
-      generateBtnText.textContent = 'Generate Listening Audio';
-    });
-
-    function handleSelectedImage(file) {
-      currentUploadedImageFile = file;
-      const url = URL.createObjectURL(file);
-      imagePreviewImg.src = url;
-      dropzoneEmptyView.classList.add('hidden');
-      imagePreviewArea.classList.remove('hidden');
-      generateBtnText.textContent = 'Generate Audio & Answer Key from Picture';
-      setGenerationStatus('Photo loaded. Click below to analyze and generate!');
-    }
 
     // Action Generate Dispatcher
     generateAudioActionBtn.addEventListener('click', handleGenerateAudioAction);
@@ -1700,10 +1524,6 @@ Return strictly valid JSON:
         setSpeed(1.0);
       } else if (e.key === '3') {
         setSpeed(1.2);
-      } else if (e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        answerKeyBox.classList.toggle('hidden');
-        toggleAnswerKeyBtn.classList.toggle('active', !answerKeyBox.classList.contains('hidden'));
       } else if (e.key.toLowerCase() === 't') {
         e.preventDefault();
         transcriptBox.classList.toggle('hidden');

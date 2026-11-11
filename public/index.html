@@ -119,23 +119,6 @@
         </div>
 
         <div class="toolbar-right-group">
-          
-          <!-- Answer Key Button (Shown when track has questions/answers) -->
-          <button id="toggleAnswerKeyBtn" class="tool-btn highlight" title="Teacher's Answer Key (K)" aria-label="Answer Key">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-            </svg>
-            <span class="tool-pill-label" id="answerKeyBadge">Answers</span>
-          </button>
-
-          <!-- Textbook Page Image Viewer Button -->
-          <button id="viewPageBtn" class="tool-btn hidden" title="View Textbook Page Picture (P)" aria-label="View Textbook Page">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-          </button>
 
           <!-- Loop / Replay Toggle -->
           <button id="loopToggleBtn" class="tool-btn" title="Toggle repeat loop" aria-label="Repeat track">
@@ -171,25 +154,6 @@
 
       </div>
 
-      <!-- TEACHER'S ANSWER KEY BOX (Collapsible, off by default for clean listening) -->
-      <div id="answerKeyBox" class="answer-key-box hidden">
-        <div class="box-header">
-          <div class="box-header-title">
-            <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-            <span>Teacher's Exercise Answer Key</span>
-          </div>
-          <div class="box-header-actions">
-            <button id="copyAnswerKeyBtn" class="btn btn-secondary-sm" title="Copy answer key to clipboard">Copy</button>
-            <button id="closeAnswerKeyBtn" class="close-x" aria-label="Close answer key">&times;</button>
-          </div>
-        </div>
-        <div id="exerciseSummaryText" class="exercise-summary-badge"></div>
-        <div id="answerKeyList" class="answer-key-list">
-          <!-- Populated dynamically -->
-        </div>
-        <div id="teacherNotesBanner" class="teacher-notes-banner hidden"></div>
-      </div>
-
       <!-- Expandable In-Player Transcript -->
       <div id="transcriptBox" class="transcript-box hidden">
         <div class="transcript-header">
@@ -208,29 +172,12 @@
       <span><kbd>Space</kbd> Play/Pause</span>
       <span><kbd>←</kbd> <kbd>→</kbd> ±5s</span>
       <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Speed</span>
-      <span><kbd>K</kbd> Answer Key</span>
       <span><kbd>T</kbd> Transcript</span>
       <span><kbd>N</kbd> New Audio</span>
       <span><kbd>L</kbd> Library</span>
     </div>
 
   </main>
-
-  <!-- TEXTBOOK PAGE LIGHTBOX MODAL -->
-  <div id="lightboxModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
-    <div class="modal-panel lightbox-panel">
-      <div class="modal-header">
-        <div>
-          <h2 id="lightboxTitle" class="modal-title">Textbook Exercise Page</h2>
-          <p class="modal-desc">Visual reference for the active listening exercise.</p>
-        </div>
-        <button id="closeLightboxBtn" class="close-btn" aria-label="Close image">&times;</button>
-      </div>
-      <div class="lightbox-image-container">
-        <img id="lightboxImg" src="" alt="Textbook Page">
-      </div>
-    </div>
-  </div>
 
   <!-- SAVED TRACKS LIBRARY MODAL -->
   <div id="libraryModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="libraryTitle">
@@ -264,7 +211,7 @@
       <div class="modal-header">
         <div>
           <h2 id="modalTitle" class="modal-title">Generate Listening Audio</h2>
-          <p class="modal-desc">Upload a textbook exercise photo, type an ESL prompt, or paste a script.</p>
+          <p class="modal-desc">Paste or type your dialogue script and synthesize with Gemini TTS voices.</p>
         </div>
         <button id="closeModalBtn" class="close-btn" aria-label="Close modal">&times;</button>
       </div>
@@ -272,89 +219,20 @@
       <!-- Quick Preset Cards -->
       <div class="presets-row">
         <span class="preset-label">Quick Presets:</span>
-        <button class="preset-chip" data-preset="lunchbox">Grade 2: Lunch Box (3 Speakers + Answers)</button>
+        <button class="preset-chip" data-preset="lunchbox">Grade 2: Lunch Box (3 Speakers)</button>
         <button class="preset-chip" data-preset="cafe">Grade 2 / ESL: Café Morning (Leo &amp; Maya)</button>
         <button class="preset-chip" data-preset="story">Solo Story: The Lost Kite (Narrator)</button>
       </div>
 
-      <!-- Mode Selector Tabs -->
-      <div class="tab-strip">
-        <button class="tab-btn active" data-tab="photoTab">
-          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          <span>Exercise Photo + Answers</span>
-        </button>
-        <button class="tab-btn" data-tab="promptTab">
-          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <span>AI Prompt to Script</span>
-        </button>
-        <button class="tab-btn" data-tab="scriptTab">
-          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span>Paste Script Manually</span>
-        </button>
-      </div>
-
-      <!-- TAB 1: EXERCISE PHOTO + AI DIALOGUE & ANSWER KEY (Featured) -->
-      <div id="photoTab" class="tab-pane active">
-        
-        <div class="upload-dropzone" id="uploadDropzone">
-          <input type="file" id="bookImageInput" accept="image/*" class="file-hidden-input">
-          <div class="dropzone-content" id="dropzoneEmptyView">
-            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            <p class="dropzone-title">Drop textbook exercise photo here or tap to snap</p>
-            <p class="dropzone-subtitle">Gemini Vision inspects the exercise, writes the missing audio dialogue, and calculates the Answer Key</p>
-          </div>
-          <div id="imagePreviewArea" class="image-preview-area hidden">
-            <img id="imagePreviewImg" alt="Exercise Preview">
-            <div class="image-meta-actions">
-              <span class="image-ready-tag">✓ Page Image Attached</span>
-              <button id="removeImageBtn" class="btn btn-secondary-sm">Change Photo</button>
-            </div>
-          </div>
+      <!-- SCRIPT / DIALOGUE INPUT -->
+      <div class="form-group" style="margin-top: 1rem;">
+        <div class="form-label-row">
+          <label for="scriptTextInput">Dialogue / Text to Speak</label>
+          <span class="hint-text">Format: "Speaker 1: Text" or "**Speaker 1**"</span>
         </div>
-
-        <div class="photo-options-grid">
-          <div class="form-group">
-            <label for="gradeLevelSelect">Curriculum Level</label>
-            <select id="gradeLevelSelect" class="form-select">
-              <option value="Cambridge Primary Grade 1-2 (Beginner ESL)" selected>Cambridge Grade 1-2 (Primary Beginner)</option>
-              <option value="Cambridge Primary Grade 3-4 (Elementary)">Cambridge Grade 3-4 (Elementary)</option>
-              <option value="Cambridge Primary Grade 5-6 (Pre-Intermediate)">Cambridge Grade 5-6 (Pre-Intermediate)</option>
-              <option value="General Secondary / Teen ESL">General Teen ESL</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="exerciseFocusInput">Optional Exercise Focus</label>
-            <input type="text" id="exerciseFocusInput" class="form-input" placeholder="E.g., Exercise 3: Gap fill or food items">
-          </div>
-        </div>
-
-      </div>
-
-      <!-- TAB 2: AI PROMPT TO DIALOGUE -->
-      <div id="promptTab" class="tab-pane hidden">
-        <div class="form-group">
-          <label for="aiPromptInput">Describe the listening activity you want to create</label>
-          <textarea id="aiPromptInput" class="form-textarea" rows="4" placeholder="E.g., A warm 4-line dialogue between teacher Leo and 7-year-old student Maya talking about their favorite pets for Grade 2 Cambridge English. Include 3 questions with an answer key."></textarea>
-          <div class="prompt-quick-actions">
-            <button id="generateScriptDraftBtn" class="btn btn-secondary">
-              <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-              <span>Draft Script &amp; Answers with Gemini</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 3: SCRIPT / DIALOGUE INPUT -->
-      <div id="scriptTab" class="tab-pane hidden">
-        <div class="form-group">
-          <div class="form-label-row">
-            <label for="scriptTextInput">Dialogue / Text to Speak</label>
-            <span class="hint-text">Format: "Speaker: Line" or single paragraphs</span>
-          </div>
-          <textarea id="scriptTextInput" class="form-textarea" rows="7" placeholder="Leo: Good morning! Welcome in.
-Maya: Hello Leo! I'd like a hot chocolate today.
-Leo: Great choice! Warmed up with marshmallows?"></textarea>
-        </div>
+        <textarea id="scriptTextInput" class="form-textarea" rows="8" placeholder="Speaker 1: Good morning! Welcome in.
+Speaker 2: Hello! I'd like to practice listening today.
+Speaker 3: Me too! The audio sounds crystal clear."></textarea>
       </div>
 
       <!-- SPEAKER & VOICE MAPPINGS -->
