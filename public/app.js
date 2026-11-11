@@ -1407,24 +1407,6 @@ Return strictly valid JSON:
     loopToggleBtn.addEventListener('click', toggleLoop);
     downloadAudioBtn.addEventListener('click', downloadAudio);
 
-    // Answer Key & Lightbox
-    toggleAnswerKeyBtn.addEventListener('click', () => {
-      answerKeyBox.classList.toggle('hidden');
-      toggleAnswerKeyBtn.classList.toggle('active', !answerKeyBox.classList.contains('hidden'));
-    });
-    closeAnswerKeyBtn.addEventListener('click', () => {
-      answerKeyBox.classList.add('hidden');
-      toggleAnswerKeyBtn.classList.remove('active');
-    });
-    copyAnswerKeyBtn.addEventListener('click', copyAnswerKeyToClipboard);
-
-    viewPageBtn.addEventListener('click', () => {
-      lightboxModal.classList.remove('hidden');
-    });
-    closeLightboxBtn.addEventListener('click', () => {
-      lightboxModal.classList.add('hidden');
-    });
-
     // Speed Selector
     speedPills.forEach(pill => {
       pill.addEventListener('click', () => {
