@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Listening">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z'/></svg>">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -216,14 +216,6 @@
         <button id="closeModalBtn" class="close-btn" aria-label="Close modal">&times;</button>
       </div>
 
-      <!-- Quick Preset Cards -->
-      <div class="presets-row">
-        <span class="preset-label">Quick Presets:</span>
-        <button class="preset-chip" data-preset="lunchbox">Grade 2: Lunch Box (3 Speakers)</button>
-        <button class="preset-chip" data-preset="cafe">Grade 2 / ESL: Café Morning (Leo &amp; Maya)</button>
-        <button class="preset-chip" data-preset="story">Solo Story: The Lost Kite (Narrator)</button>
-      </div>
-
       <!-- SCRIPT / DIALOGUE INPUT -->
       <div class="form-group" style="margin-top: 1rem;">
         <div class="form-label-row">
@@ -338,11 +330,16 @@ Speaker 3: Me too! The audio sounds crystal clear."></textarea>
   <!-- Audio Element (Hidden Core) -->
   <audio id="coreAudioPlayer" preload="auto"></audio>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(console.warn);
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const r of regs) r.unregister();
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        for (const k of keys) caches.delete(k);
       });
     }
   </script>

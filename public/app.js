@@ -926,10 +926,10 @@ Maya: Perfect, there we go. Thank you so much!`,
         const errJson = await res.json().catch(() => ({}));
         const errMsg = errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`;
 
-        // 1. If daily quota exhausted on 3.8, seamlessly switch to 3.1
-        if (res.status === 429 && (errMsg.includes('per day') || errMsg.includes('daily')) && activeModel !== 'gemini-3.1-flash-tts-preview') {
-          console.warn(`${activeModel} daily quota limit reached, automatically switching to gemini-3.1-flash-tts-preview...`);
-          setGenerationStatus('Auto-switching to gemini-3.1-flash-tts-preview (daily quota limit on 3.8)...');
+        // 1. If 429 on 3.8 / 3.8-lite, seamlessly switch to 3.1
+        if (res.status === 429 && activeModel !== 'gemini-3.1-flash-tts-preview') {
+          console.warn(`${activeModel} limit hit (429), automatically switching to gemini-3.1-flash-tts-preview...`);
+          setGenerationStatus('Auto-switching to gemini-3.1-flash-tts-preview...');
           return requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel, 'gemini-3.1-flash-tts-preview');
         }
 
@@ -1007,44 +1007,54 @@ Maya: Perfect, there we go. Thank you so much!`,
           ]
         }));
 
-        const payload = {
-          model: model,
-          input: [
-            {
-              type: 'user_input',
-              content: contentItems
+        async function try2SpeakerCall(targetModel) {
+          const payload = {
+            model: targetModel,
+            input: [
+              {
+                type: 'user_input',
+                content: contentItems
+              }
+            ],
+            response_format: { type: 'audio' },
+            generation_config: {
+              speech_config: {
+                speakers: speakerConfigs
+              }
             }
-          ],
-          response_format: { type: 'audio' },
-          generation_config: {
-            speech_config: {
-              speakers: speakerConfigs
+          };
+
+          const fetchUrl = state.apiKey
+            ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
+            : `/api/tts`;
+          const fetchHeaders = { 'Content-Type': 'application/json' };
+          if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
+
+          const res = await fetch(fetchUrl, {
+            method: 'POST',
+            headers: fetchHeaders,
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            const errMsg = errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`;
+            if (res.status === 429 && targetModel !== 'gemini-3.1-flash-tts-preview') {
+              console.warn('Switching 2-speaker dialogue to gemini-3.1-flash-tts-preview...');
+              setGenerationStatus('Auto-switching to gemini-3.1-flash-tts-preview...');
+              return try2SpeakerCall('gemini-3.1-flash-tts-preview');
             }
+            throw new Error(errMsg);
           }
-        };
 
-        const fetchUrl = state.apiKey
-          ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
-          : `/api/tts`;
-        const fetchHeaders = { 'Content-Type': 'application/json' };
-        if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
-
-        const res = await fetch(fetchUrl, {
-          method: 'POST',
-          headers: fetchHeaders,
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
+          const responseData = await res.json();
+          const b64 = extractAudioBase64(responseData);
+          const bytes = base64ToUint8Array(b64);
+          const blob = new Blob([bytes], { type: 'audio/wav' });
+          return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
         }
 
-        const responseData = await res.json();
-        const b64 = extractAudioBase64(responseData);
-        const bytes = base64ToUint8Array(b64);
-        const blob = new Blob([bytes], { type: 'audio/wav' });
-        return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+        return await try2SpeakerCall(model);
       } catch (err2Spk) {
         console.warn('Native 2-speaker dialogue call failed, falling back to multi-track stitching:', err2Spk);
         setGenerationStatus('Switching to multi-track audio stitching...');
