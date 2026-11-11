@@ -1,0 +1,13 @@
+{
+  "name": "listening-audio",
+  "version": "1.0.0",
+  "description": "Distraction-free listening audio player with Gemini 3.8 TTS & Cloudflare KV storage",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": ["gemini", "tts", "listening", "cloudflare", "pwa"],
+  "author": "Muhamer Arifi",
+  "license": "MIT"
+}

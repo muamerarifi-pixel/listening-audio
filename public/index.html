@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Listening Audio — Gemini TTS &amp; Cloudflare</title>
+  <meta name="description" content="Fast, distraction-free listening audio powered by Gemini TTS and Cloudflare KV.">
+  <meta name="theme-color" content="#0b0f19" id="theme-meta">
+  <meta name="color-scheme" content="dark light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Listening">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Background Ambience -->
+  <div class="ambient-glow" aria-hidden="true"></div>
+
+  <!-- Minimal Header Bar -->
+  <header class="top-nav">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-title">Listening Studio</span>
+      <span class="badge-tts">Gemini 3.8 TTS</span>
+      <span class="badge-cloud" id="storageBadge" title="Cloudflare KV Storage Enabled">Cloudflare KV</span>
+    </div>
+    <div class="nav-actions">
+      <button id="savedTracksBtn" class="icon-btn" title="Saved Tracks (Library)" aria-label="Saved tracks">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      </button>
+      <button id="themeToggleBtn" class="icon-btn" title="Toggle theme (Light/Dark)" aria-label="Toggle theme">
+        <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="themeIconMoon" class="icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button id="openDrawerBtn" class="btn btn-primary-pill" title="New Audio / Settings">
+        <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        <span>New Audio</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PURE FOCUSED LISTENING PLAYER (Zero Clutter) -->
+  <main class="player-stage">
+    
+    <div class="player-card">
+      
+      <!-- Track Meta Header -->
+      <div class="track-header">
+        <div class="track-status-pill" id="trackStatusPill">
+          <span class="pulse-indicator"></span>
+          <span id="trackStatusText">Ready to Play</span>
+        </div>
+        <h1 class="track-title" id="trackTitleDisplay">Cambridge Grade 2: Coffee &amp; Story Dialogue</h1>
+        <p class="track-subtitle" id="trackSubtitleDisplay">Leo (Puck) &amp; Maya (Aoede) • Warm &amp; Clear English</p>
+      </div>
+
+      <!-- Live Audio Waveform Canvas -->
+      <div class="waveform-wrapper">
+        <canvas id="waveformCanvas" width="640" height="96"></canvas>
+      </div>
+
+      <!-- Scrubber Timeline -->
+      <div class="scrubber-container">
+        <div class="timeline-bar" id="timelineBar">
+          <div class="timeline-progress" id="timelineProgress"></div>
+          <div class="timeline-handle" id="timelineHandle"></div>
+        </div>
+        <div class="timeline-timestamps">
+          <span id="currentTimeLabel">0:00</span>
+          <span id="durationLabel">0:00</span>
+        </div>
+      </div>
+
+      <!-- Primary Listening Controls -->
+      <div class="controls-cluster">
+        
+        <!-- Jump -5s (Essential for teachers / listening comprehension) -->
+        <button id="jumpBackBtn" class="control-btn secondary" title="Replay 5 seconds (Left Arrow)" aria-label="Replay 5 seconds">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+          <span class="btn-subtext">-5s</span>
+        </button>
+
+        <!-- Big Play / Pause Button -->
+        <button id="mainPlayBtn" class="control-btn play-master" title="Play / Pause (Spacebar)" aria-label="Play or Pause">
+          <svg id="playIconSvg" class="icon-master" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+          <svg id="pauseIconSvg" class="icon-master hidden" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        </button>
+
+        <!-- Jump +5s -->
+        <button id="jumpForwardBtn" class="control-btn secondary" title="Forward 5 seconds (Right Arrow)" aria-label="Forward 5 seconds">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          <span class="btn-subtext">+5s</span>
+        </button>
+
+      </div>
+
+      <!-- Quick Listening Utility Toolbar -->
+      <div class="utility-toolbar">
+        
+        <!-- Speed Selector (0.8x ESL slow, 1.0x standard, 1.2x fast) -->
+        <div class="speed-selector" role="group" aria-label="Playback speed">
+          <button class="speed-pill" data-speed="0.8" title="0.8x slow speed for ESL learners">0.8×</button>
+          <button class="speed-pill active" data-speed="1.0" title="1.0x normal speed">1.0×</button>
+          <button class="speed-pill" data-speed="1.2" title="1.2x faster speed">1.2×</button>
+        </div>
+
+        <!-- Loop / Replay Toggle -->
+        <button id="loopToggleBtn" class="tool-btn" title="Toggle repeat loop" aria-label="Repeat track">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </button>
+
+        <!-- Download Audio File -->
+        <button id="downloadAudioBtn" class="tool-btn" title="Download audio file (WAV)" aria-label="Download audio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+
+        <!-- Script / Transcript Drawer Peek -->
+        <button id="toggleTranscriptBtn" class="tool-btn" title="View text transcript" aria-label="Toggle transcript">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </button>
+
+      </div>
+
+      <!-- Expandable In-Player Transcript (Off by default for pure listening) -->
+      <div id="transcriptBox" class="transcript-box hidden">
+        <div class="transcript-header">
+          <span>Dialogue Transcript</span>
+          <button id="closeTranscriptBtn" class="close-x" aria-label="Close transcript">&times;</button>
+        </div>
+        <div id="transcriptContent" class="transcript-body">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Keyboard Shortcuts Hint -->
+    <div class="keyboard-hints">
+      <span><kbd>Space</kbd> Play / Pause</span>
+      <span><kbd>←</kbd> <kbd>→</kbd> ±5s</span>
+      <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Speed</span>
+      <span><kbd>N</kbd> New Audio</span>
+      <span><kbd>L</kbd> Library</span>
+    </div>
+
+  </main>
+
+  <!-- SAVED TRACKS LIBRARY MODAL -->
+  <div id="libraryModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="libraryTitle">
+    <div class="modal-panel library-panel">
+      <div class="modal-header">
+        <div>
+          <h2 id="libraryTitle" class="modal-title">Saved Listening Tracks</h2>
+          <p class="modal-desc">All listening audios synced to Cloudflare KV storage.</p>
+        </div>
+        <button id="closeLibraryBtn" class="close-btn" aria-label="Close library">&times;</button>
+      </div>
+
+      <div id="libraryList" class="library-list">
+        <div class="loading-state">Fetching saved tracks from Cloudflare...</div>
+      </div>
+
+      <div class="modal-footer">
+        <span class="modal-status" id="libraryStatus">Cloudflare KV Connected</span>
+        <button id="refreshLibraryBtn" class="btn btn-secondary">
+          <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATION DRAWER / MODAL -->
+  <div id="creatorModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-panel">
+      
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle" class="modal-title">Generate Listening Audio</h2>
+          <p class="modal-desc">Type a prompt, paste a dialogue script, or upload a textbook photo.</p>
+        </div>
+        <button id="closeModalBtn" class="close-btn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <!-- Quick Preset Cards -->
+      <div class="presets-row">
+        <span class="preset-label">Quick Presets:</span>
+        <button class="preset-chip" data-preset="lunchbox">Grade 2: Lunch Box (3 Speakers)</button>
+        <button class="preset-chip" data-preset="cafe">Grade 2 / ESL: Café Morning (Leo &amp; Maya)</button>
+        <button class="preset-chip" data-preset="story">Solo Story: The Lost Kite (Narrator)</button>
+      </div>
+
+      <!-- Mode Selector Tabs -->
+      <div class="tab-strip">
+        <button class="tab-btn active" data-tab="scriptTab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Script / Dialogue</span>
+        </button>
+        <button class="tab-btn" data-tab="promptTab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>AI Prompt to Script</span>
+        </button>
+        <button class="tab-btn" data-tab="photoTab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>Book Photo / OCR</span>
+        </button>
+      </div>
+
+      <!-- TAB 1: SCRIPT / DIALOGUE INPUT -->
+      <div id="scriptTab" class="tab-pane active">
+        <div class="form-group">
+          <div class="form-label-row">
+            <label for="scriptTextInput">Dialogue / Text to Speak</label>
+            <span class="hint-text">Format: "Speaker: Line" or single paragraphs</span>
+          </div>
+          <textarea id="scriptTextInput" class="form-textarea" rows="7" placeholder="Leo: Good morning! Welcome in.
+Maya: Hello Leo! I'd like a hot chocolate today.
+Leo: Great choice! Warmed up with marshmallows?"></textarea>
+        </div>
+      </div>
+
+      <!-- TAB 2: AI PROMPT TO DIALOGUE -->
+      <div id="promptTab" class="tab-pane hidden">
+        <div class="form-group">
+          <label for="aiPromptInput">Describe what you want the characters to say</label>
+          <textarea id="aiPromptInput" class="form-textarea" rows="4" placeholder="E.g., A warm 4-line dialogue between teacher Leo and 7-year-old student Maya talking about their favorite pets for Grade 2 Cambridge English. Simple vocabulary, polite and cheerful."></textarea>
+          <div class="prompt-quick-actions">
+            <button id="generateScriptDraftBtn" class="btn btn-secondary">
+              <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Draft Script with Gemini</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: BOOK PHOTO / OCR -->
+      <div id="photoTab" class="tab-pane hidden">
+        <div class="upload-dropzone" id="uploadDropzone">
+          <input type="file" id="bookImageInput" accept="image/*" class="file-hidden-input">
+          <div class="dropzone-content">
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <p class="dropzone-title">Drop textbook photo here or click to browse</p>
+            <p class="dropzone-subtitle">Gemini Vision will extract speakers and dialogue lines automatically</p>
+          </div>
+          <div id="imagePreviewArea" class="image-preview-area hidden">
+            <img id="imagePreviewImg" alt="Preview">
+            <button id="extractImageTextBtn" class="btn btn-accent">Extract Dialogue from Book</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPEAKER & VOICE MAPPINGS -->
+      <div class="form-section">
+        <div class="section-title-sm">Voice Configuration &amp; Style</div>
+        
+        <div class="speakers-grid">
+          
+          <div class="speaker-card">
+            <span class="speaker-tag speaker-1">Speaker 1 (Default / Leo)</span>
+            <div class="select-wrapper">
+              <select id="voice1Select" class="form-select">
+                <option value="Puck" selected>Puck (Warm, friendly male)</option>
+                <option value="Fenrir">Fenrir (Deep, calm male)</option>
+                <option value="Zephyr">Zephyr (Gentle, soft male)</option>
+                <option value="Aoede">Aoede (Breezy, warm female)</option>
+                <option value="Kore">Kore (Clear, gentle female)</option>
+                <option value="Charon">Charon (Authoritative narrator)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="speaker-card">
+            <span class="speaker-tag speaker-2">Speaker 2 (Maya / Partner)</span>
+            <div class="select-wrapper">
+              <select id="voice2Select" class="form-select">
+                <option value="Aoede" selected>Aoede (Breezy, warm female)</option>
+                <option value="Kore">Kore (Clear, gentle female)</option>
+                <option value="Puck">Puck (Warm, friendly male)</option>
+                <option value="Fenrir">Fenrir (Deep, calm male)</option>
+                <option value="Zephyr">Zephyr (Gentle male)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="speaker-card">
+            <span class="speaker-tag speaker-3">Speaker 3 (Emma / Guest)</span>
+            <div class="select-wrapper">
+              <select id="voice3Select" class="form-select">
+                <option value="Kore" selected>Kore (Gentle, expressive female)</option>
+                <option value="Aoede">Aoede (Breezy female)</option>
+                <option value="Puck">Puck (Friendly male)</option>
+                <option value="Zephyr">Zephyr (Gentle male)</option>
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="style-row">
+          <label for="deliveryStyleInput">ESL Delivery Style / Teacher Prompt:</label>
+          <input type="text" id="deliveryStyleInput" class="form-input" value="Clear, friendly enunciation for Cambridge Grade 2 ESL learners, natural pacing with gentle pauses">
+        </div>
+
+        <div class="save-kv-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="saveToCloudflareCheckbox" checked>
+            <span>Automatically save to Cloudflare KV storage</span>
+          </label>
+        </div>
+
+      </div>
+
+      <!-- API KEY & ADVANCED SETTINGS -->
+      <details class="settings-accordion">
+        <summary>Gemini API Settings &amp; Engine</summary>
+        <div class="settings-content">
+          <div class="form-group">
+            <label for="apiKeyInput">Gemini API Key</label>
+            <div class="api-key-row">
+              <input type="password" id="apiKeyInput" class="form-input" placeholder="AIzaSy... (Stored locally in your browser only)">
+              <button id="saveKeyBtn" class="btn btn-secondary">Save</button>
+            </div>
+            <p class="key-hint">Your key is never sent to third-party servers. It communicates directly with Google's API.</p>
+          </div>
+          <div class="form-group">
+            <label for="ttsModelSelect">TTS Model</label>
+            <select id="ttsModelSelect" class="form-select">
+              <option value="gemini-3.8-flash-tts" selected>gemini-3.8-flash-tts (High Fidelity Audio)</option>
+              <option value="gemini-3.8-flash-lite-tts">gemini-3.8-flash-lite-tts (Ultra Fast)</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <!-- MODAL ACTION FOOTER -->
+      <div class="modal-footer">
+        <div class="modal-status" id="generationStatusMsg">Ready</div>
+        <div class="footer-buttons">
+          <button id="cancelModalBtn" class="btn btn-ghost">Cancel</button>
+          <button id="generateAudioActionBtn" class="btn btn-primary-lg">
+            <span class="spinner hidden" id="actionSpinner"></span>
+            <svg class="icon-inline" id="actionPlayIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span id="generateBtnText">Generate Listening Audio</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Audio Element (Hidden Core) -->
+  <audio id="coreAudioPlayer" preload="auto"></audio>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(console.warn);
+      });
+    }
+  </script>
+</body>
+</html>
