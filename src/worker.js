@@ -2,10 +2,11 @@
 //
 // Endpoints:
 // GET    /api/tracks        - List all saved listening tracks
-// GET    /api/tracks/:id    - Get track metadata & transcript
+// GET    /api/tracks/:id    - Get track metadata, transcript & answer key
 // GET    /api/audio/:id     - Stream WAV audio binary directly from KV
-// POST   /api/tracks        - Save audio & metadata into KV
-// DELETE /api/tracks/:id    - Delete track from KV
+// GET    /api/image/:id     - Stream textbook exercise image directly from KV
+// POST   /api/tracks        - Save audio, image, transcript & answer key into KV
+// DELETE /api/tracks/:id    - Delete track, audio & image from KV
 // POST   /api/tts           - Server-side Gemini 3.8 TTS generation & storage
 // Everything else is served from public/ via env.ASSETS.
 
@@ -91,7 +92,28 @@ export default {
         });
       }
 
-      // 3. GET /api/tracks/:id - Get single track metadata
+      // 3. GET /api/image/:id - Stream textbook exercise image
+      if (path.startsWith('/api/image/') && method === 'GET') {
+        const id = path.replace('/api/image/', '').trim();
+        if (!id) return json({ error: 'Missing image ID' }, 400);
+
+        const imageBuffer = await env.LISTENING_DATA.get('image:' + id, { type: 'arrayBuffer' });
+        if (!imageBuffer) {
+          return json({ error: 'Image not found' }, 404);
+        }
+
+        return new Response(imageBuffer, {
+          status: 200,
+          headers: {
+            'content-type': 'image/jpeg',
+            'content-length': String(imageBuffer.byteLength),
+            'cache-control': 'public, max-age=604800, immutable',
+            ...CORS_HEADERS
+          }
+        });
+      }
+
+      // 4. GET /api/tracks/:id - Get single track metadata, transcript & answer key
       if (path.startsWith('/api/tracks/') && method === 'GET') {
         const id = path.replace('/api/tracks/', '').trim();
         const raw = await env.LISTENING_DATA.get('track:' + id);
@@ -99,32 +121,67 @@ export default {
         return json(JSON.parse(raw));
       }
 
-      // 4. POST /api/tracks - Save new track
+      // 5. POST /api/tracks - Save new track with audio, image & answer key
       if (path === '/api/tracks' && method === 'POST') {
         const body = await request.json();
-        const { id, title, subtitle, transcript, audioBase64, style } = body;
+        const {
+          id,
+          title,
+          subtitle,
+          transcript,
+          audioBase64,
+          style,
+          answerKey,
+          teacherNotes,
+          imageBase64,
+          exerciseSummary
+        } = body;
 
         if (!id || !title || !audioBase64) {
           return json({ error: 'id, title, and audioBase64 are required' }, 400);
         }
 
-        // Decode Base64 to ArrayBuffer
-        const binaryStr = atob(audioBase64);
-        const len = binaryStr.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
+        // Decode Audio Base64 to ArrayBuffer
+        const binaryAudioStr = atob(audioBase64);
+        const audioLen = binaryAudioStr.length;
+        const audioBytes = new Uint8Array(audioLen);
+        for (let i = 0; i < audioLen; i++) {
+          audioBytes[i] = binaryAudioStr.charCodeAt(i);
         }
 
         // Save audio binary in KV
-        await env.LISTENING_DATA.put('audio:' + id, bytes.buffer);
+        await env.LISTENING_DATA.put('audio:' + id, audioBytes.buffer);
+
+        // Optionally save image binary if provided
+        let imageUrl = null;
+        if (imageBase64) {
+          try {
+            const rawBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+            const binaryImgStr = atob(rawBase64);
+            const imgLen = binaryImgStr.length;
+            const imgBytes = new Uint8Array(imgLen);
+            for (let i = 0; i < imgLen; i++) {
+              imgBytes[i] = binaryImgStr.charCodeAt(i);
+            }
+            await env.LISTENING_DATA.put('image:' + id, imgBytes.buffer);
+            imageUrl = `/api/image/${id}`;
+          } catch (e) {
+            console.warn('Could not save image to KV:', e);
+          }
+        }
 
         const trackMeta = {
           id,
           title,
           subtitle: subtitle || '',
           style: style || '',
+          exerciseSummary: exerciseSummary || '',
           transcript: transcript || [],
+          answerKey: Array.isArray(answerKey) ? answerKey : [],
+          teacherNotes: teacherNotes || '',
+          imageUrl,
+          hasImage: !!imageUrl,
+          hasAnswerKey: Array.isArray(answerKey) && answerKey.length > 0,
           createdAt: new Date().toISOString(),
           audioUrl: `/api/audio/${id}`
         };
@@ -141,7 +198,10 @@ export default {
           title,
           subtitle: subtitle || '',
           createdAt: trackMeta.createdAt,
-          audioUrl: trackMeta.audioUrl
+          audioUrl: trackMeta.audioUrl,
+          hasImage: trackMeta.hasImage,
+          hasAnswerKey: trackMeta.hasAnswerKey,
+          imageUrl: trackMeta.imageUrl
         });
 
         // Limit index to latest 50 tracks
@@ -151,11 +211,12 @@ export default {
         return json({ success: true, track: trackMeta });
       }
 
-      // 5. DELETE /api/tracks/:id - Delete track
+      // 6. DELETE /api/tracks/:id - Delete track, audio & image
       if (path.startsWith('/api/tracks/') && method === 'DELETE') {
         const id = path.replace('/api/tracks/', '').trim();
         await env.LISTENING_DATA.delete('track:' + id);
         await env.LISTENING_DATA.delete('audio:' + id);
+        await env.LISTENING_DATA.delete('image:' + id);
 
         const rawIndex = await env.LISTENING_DATA.get('tracks_index');
         if (rawIndex) {
@@ -167,7 +228,7 @@ export default {
         return json({ success: true, deletedId: id });
       }
 
-      // 6. POST /api/tts - Server-side Gemini 3.8 TTS proxy
+      // 7. POST /api/tts - Server-side Gemini 3.8 TTS proxy
       if (path === '/api/tts' && method === 'POST') {
         const apiKey = env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
         if (!apiKey) {

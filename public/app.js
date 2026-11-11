@@ -1,4 +1,4 @@
-// Listening Studio - Gemini TTS Engine & Distraction-Free Audio Player with Cloudflare KV
+// Listening Studio - Gemini 3.8 TTS & Multimodal Exercise Dialogue Generator with Cloudflare KV
 
 (function () {
   'use strict';
@@ -12,25 +12,25 @@
     currentTime: 0,
     playbackRate: 1.0,
     isLooping: false,
-    currentTrackTitle: 'Cambridge Grade 2: Coffee & Story Dialogue',
-    currentTrackSubtitle: 'Leo (Puck) & Maya (Aoede) • Warm & Clear English',
+    currentTrackTitle: 'Cambridge Grade 2: Unit 9 — In My Lunch Box!',
+    currentTrackSubtitle: 'Mia (Aoede), Leo (Puck) & Emma (Kore) • Primary ESL Listening',
+    currentExerciseSummary: 'Exercise 4: Listen to what Mia, Leo, and Emma say. Match with lunch boxes A, B, or C.',
     currentTranscript: [
-      { speaker: 'Leo', style: 'warm, friendly barista', text: 'Good morning! Welcome in. Looks like you just beat the downpour out there.' },
-      { speaker: 'Maya', style: 'cheerful', text: 'Barely! My umbrella flipped inside out right at the corner. I definitely need something warm to recover.' },
-      { speaker: 'Leo', style: 'sympathetic and welcoming', text: 'You came to the right place. What can I get started for you today?' },
-      { speaker: 'Maya', style: 'thoughtful', text: 'I usually get an iced latte, but today calls for a change. What do you recommend?' },
-      { speaker: 'Leo', style: 'enthusiastic and helpful', text: 'If you like something a little sweet, our cinnamon oat milk cortado is great. Otherwise, a classic cappuccino.' },
-      { speaker: 'Maya', style: 'delighted', text: 'The cinnamon cortado sounds amazing. Let\'s do a medium, please—and maybe an almond croissant.' },
-      { speaker: 'Leo', style: 'friendly and attentive', text: 'Great choice. Would you like the croissant warmed up?' },
-      { speaker: 'Maya', style: 'curious', text: 'Yes, please. By the way, are you new here? Today is my first time seeing you.' },
-      { speaker: 'Leo', style: 'pleased and open', text: 'Good eye! Today is actually my third day. I\'m Leo.' },
-      { speaker: 'Maya', style: 'warm and friendly', text: 'Nice to meet you, Leo. I\'m Maya. Settling in well?' },
-      { speaker: 'Leo', style: 'chuckling, humble', text: 'Pretty well, thanks! Still getting the hang of it.' },
-      { speaker: 'Maya', style: 'smiling', text: 'Take your time!' }
+      { speaker: 'Mia', text: "In my lunch box, I've got a cheese and tomato sandwich. I haven't got a banana, but I've got an apple. I've got a drink today!" },
+      { speaker: 'Leo', text: "In my lunch box, I've got a cheese sandwich, a banana, and an orange. I haven't got a biscuit. I haven't got a drink today." },
+      { speaker: 'Emma', text: "I've got a pear and a biscuit. I've got two sandwiches. They are egg! My drink is water. I haven't got an apple." }
     ],
+    currentAnswerKey: [
+      { item: '1', question: "Mia's Lunch Box", answer: 'Box A', clue: "Mia: 'I've got a cheese and tomato sandwich... and an apple. I've got a drink today!'" },
+      { item: '2', question: "Leo's Lunch Box", answer: 'Box B', clue: "Leo: 'I've got a cheese sandwich, a banana, and an orange. I haven't got a drink.'" },
+      { item: '3', question: "Emma's Lunch Box", answer: 'Box C', clue: "Emma: 'I've got a pear and a biscuit. I've got two sandwiches. They are egg!'" }
+    ],
+    currentTeacherNotes: 'Play once at 0.8x for young learners to identify food words. Play a second time at 1.0x for matching.',
+    currentImageUrl: null,
+    currentImageBase64: null,
     savedTracks: [],
     apiKey: localStorage.getItem('listening_gemini_api_key') || '',
-    activeTab: 'scriptTab',
+    activeTab: 'photoTab',
     hasKvBackend: false
   };
 
@@ -39,25 +39,46 @@
     lunchbox: {
       title: 'Cambridge Grade 2: Unit 9 — In My Lunch Box!',
       subtitle: 'Mia (Aoede), Leo (Puck) & Emma (Kore) • Primary ESL Listening',
+      exerciseSummary: 'Exercise 4: Listen and match the food items with Lunch Boxes A, B, or C.',
       style: 'Clear, gentle enunciation for 7-year-old Cambridge ESL learners, natural pauses',
       script: `Mia: In my lunch box, I've got a cheese and tomato sandwich. I haven't got a banana, but I've got an apple. I've got a drink today!
 Leo: In my lunch box, I've got a cheese sandwich, a banana, and an orange. I haven't got a biscuit. I haven't got a drink today.
-Emma: I've got a pear and a biscuit. I've got two sandwiches. They are egg! My drink is water. I haven't got an apple.`
+Emma: I've got a pear and a biscuit. I've got two sandwiches. They are egg! My drink is water. I haven't got an apple.`,
+      answerKey: [
+        { item: '1', question: "Mia's Box", answer: 'Box A (Cheese/tomato, apple, drink)', clue: "Mia: 'I've got a cheese and tomato sandwich and an apple.'" },
+        { item: '2', question: "Leo's Box", answer: 'Box B (Cheese sandwich, banana, orange)', clue: "Leo: 'I've got a cheese sandwich, a banana, and an orange.'" },
+        { item: '3', question: "Emma's Box", answer: 'Box C (Two egg sandwiches, pear, biscuit, water)', clue: "Emma: 'I've got a pear and a biscuit. Two sandwiches. They are egg!'" }
+      ],
+      teacherNotes: 'Pre-teach: have got / haven\'t got. Encourage students to tick items in their worksheets.'
     },
     cafe: {
       title: 'Everyday Dialogue: At the Café',
       subtitle: 'Leo (Puck) & Maya (Aoede) • Natural Conversational English',
+      exerciseSummary: 'Listening Comprehension: What does Maya order?',
       style: 'Friendly, warm, conversational English with natural vocal inflection',
       script: `Leo: Good morning! Welcome in. What can I get started for you today?
-Maya: Good morning Leo! I'd like a cinnamon cortado and a warm croissant, please.
-Leo: Excellent choice. Tap or insert your card right here whenever you're ready.
-Maya: Perfect. Thank you so much!`
+Maya: Good morning Leo! I'd like a cinnamon oat milk cortado and a warm croissant, please.
+Leo: Excellent choice. Tap or insert your card right here whenever you're ready. That'll be $8.50.
+Maya: Perfect, there we go. Thank you so much!`,
+      answerKey: [
+        { item: '1', question: 'What drink does Maya order?', answer: 'Cinnamon oat milk cortado', clue: "Maya: 'I'd like a cinnamon oat milk cortado...'" },
+        { item: '2', question: 'What pastry does she choose?', answer: 'A warm croissant', clue: "Maya: '...and a warm croissant, please.'" },
+        { item: '3', question: 'How much is the total?', answer: '$8.50', clue: "Leo: 'That'll be $8.50.'" }
+      ],
+      teacherNotes: 'Focus on polite customer service phrases: "What can I get started for you?", "Whenever you\'re ready".'
     },
     story: {
       title: 'Story Narration: The Lost Kite',
       subtitle: 'Solo Storyteller (Charon) • Clear ESL Story Narration',
+      exerciseSummary: 'Story Listening: Toby and the yellow kite.',
       style: 'Warm, expressive children\'s story narrator, slow and rhythmic',
-      script: `Narrator: It was a windy Saturday morning in the park. Toby held the yellow kite tightly by the string. Suddenly, a big gust of wind blew across the trees! Toby looked up. His kite danced into the blue sky like a giant bird.`
+      script: `Narrator: It was a windy Saturday morning in the park. Toby held the yellow kite tightly by the string. Suddenly, a big gust of wind blew across the trees! Toby looked up. His kite danced into the blue sky like a giant bird.`,
+      answerKey: [
+        { item: '1', question: 'What day was it?', answer: 'Saturday morning', clue: "Narrator: 'It was a windy Saturday morning...'" },
+        { item: '2', question: 'What color was Toby\'s kite?', answer: 'Yellow', clue: "Narrator: 'Toby held the yellow kite tightly...'" },
+        { item: '3', question: 'Where did the kite fly?', answer: 'Into the blue sky', clue: "Narrator: 'His kite danced into the blue sky...'" }
+      ],
+      teacherNotes: 'Great for past tense introduction (was, held, blew, looked, danced).'
     }
   };
 
@@ -75,6 +96,21 @@ Maya: Perfect. Thank you so much!`
   const transcriptBox = document.getElementById('transcriptBox');
   const transcriptContent = document.getElementById('transcriptContent');
   
+  // Teacher Answer Key & Image Lightbox Elements
+  const toggleAnswerKeyBtn = document.getElementById('toggleAnswerKeyBtn');
+  const closeAnswerKeyBtn = document.getElementById('closeAnswerKeyBtn');
+  const copyAnswerKeyBtn = document.getElementById('copyAnswerKeyBtn');
+  const answerKeyBox = document.getElementById('answerKeyBox');
+  const answerKeyBadge = document.getElementById('answerKeyBadge');
+  const answerKeyList = document.getElementById('answerKeyList');
+  const exerciseSummaryText = document.getElementById('exerciseSummaryText');
+  const teacherNotesBanner = document.getElementById('teacherNotesBanner');
+  
+  const viewPageBtn = document.getElementById('viewPageBtn');
+  const lightboxModal = document.getElementById('lightboxModal');
+  const closeLightboxBtn = document.getElementById('closeLightboxBtn');
+  const lightboxImg = document.getElementById('lightboxImg');
+
   const timelineBar = document.getElementById('timelineBar');
   const timelineProgress = document.getElementById('timelineProgress');
   const timelineHandle = document.getElementById('timelineHandle');
@@ -108,15 +144,21 @@ Maya: Perfect. Thank you so much!`
   const cancelModalBtn = document.getElementById('cancelModalBtn');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabPanes = document.querySelectorAll('.tab-pane');
+  
+  // Photo Tab Elements
+  const bookImageInput = document.getElementById('bookImageInput');
+  const uploadDropzone = document.getElementById('uploadDropzone');
+  const dropzoneEmptyView = document.getElementById('dropzoneEmptyView');
+  const imagePreviewArea = document.getElementById('imagePreviewArea');
+  const imagePreviewImg = document.getElementById('imagePreviewImg');
+  const removeImageBtn = document.getElementById('removeImageBtn');
+  const gradeLevelSelect = document.getElementById('gradeLevelSelect');
+  const exerciseFocusInput = document.getElementById('exerciseFocusInput');
+
+  // Text & Prompt Tab Elements
   const scriptTextInput = document.getElementById('scriptTextInput');
   const aiPromptInput = document.getElementById('aiPromptInput');
   const generateScriptDraftBtn = document.getElementById('generateScriptDraftBtn');
-  
-  const bookImageInput = document.getElementById('bookImageInput');
-  const uploadDropzone = document.getElementById('uploadDropzone');
-  const imagePreviewArea = document.getElementById('imagePreviewArea');
-  const imagePreviewImg = document.getElementById('imagePreviewImg');
-  const extractImageTextBtn = document.getElementById('extractImageTextBtn');
   
   const voice1Select = document.getElementById('voice1Select');
   const voice2Select = document.getElementById('voice2Select');
@@ -142,12 +184,16 @@ Maya: Perfect. Thank you so much!`
   let dataArray = null;
   let animFrameId = null;
 
+  // Attached image file reference
+  let currentUploadedImageFile = null;
+
   // --- INITIALIZATION ---
   function init() {
     setupTheme();
     loadSavedSettings();
     bindEvents();
     renderTranscript();
+    renderAnswerKey();
     loadAudioTrack(state.audioUrl, false);
     initWaveformCanvas();
     checkKvBackend();
@@ -216,7 +262,7 @@ Maya: Perfect. Thank you so much!`
   function renderLibraryList() {
     libraryList.innerHTML = '';
     if (!state.savedTracks || state.savedTracks.length === 0) {
-      libraryList.innerHTML = '<div class="empty-state">No saved tracks yet. Generate one to save it to Cloudflare KV!</div>';
+      libraryList.innerHTML = '<div class="empty-state">No saved tracks yet. Generate an audio from a book photo or prompt to save it to Cloudflare KV!</div>';
       return;
     }
 
@@ -225,11 +271,13 @@ Maya: Perfect. Thank you so much!`
       item.className = 'track-item';
 
       const dateStr = track.createdAt ? new Date(track.createdAt).toLocaleDateString() : '';
+      const keyBadge = track.hasAnswerKey ? '<span class="badge-mini-key">🔑 Answers</span>' : '';
+      const pageBadge = track.hasImage ? '<span class="badge-mini-key" style="color:var(--accent);background:var(--accent-dim);border-color:var(--accent)">🖼️ Page</span>' : '';
 
       item.innerHTML = `
         <div class="track-info">
           <div class="track-item-title">${escapeHtml(track.title || 'Untitled Track')}</div>
-          <div class="track-item-meta">${escapeHtml(track.subtitle || '')} • ${dateStr}</div>
+          <div class="track-item-meta">${escapeHtml(track.subtitle || '')} • ${dateStr} ${keyBadge} ${pageBadge}</div>
         </div>
         <div class="track-actions">
           <button class="track-play-btn" data-id="${track.id}" title="Play Track">
@@ -243,7 +291,6 @@ Maya: Perfect. Thank you so much!`
       libraryList.appendChild(item);
     });
 
-    // Bind item buttons
     libraryList.querySelectorAll('.track-play-btn').forEach(btn => {
       btn.addEventListener('click', () => loadTrackById(btn.dataset.id));
     });
@@ -262,10 +309,17 @@ Maya: Perfect. Thank you so much!`
       state.currentTrackTitle = track.title;
       state.currentTrackSubtitle = track.subtitle || '';
       state.currentTranscript = track.transcript || [];
+      state.currentAnswerKey = track.answerKey || [];
+      state.currentTeacherNotes = track.teacherNotes || '';
+      state.currentExerciseSummary = track.exerciseSummary || '';
+      state.currentImageUrl = track.hasImage ? `/api/image/${id}` : null;
 
       trackTitleDisplay.textContent = state.currentTrackTitle;
       trackSubtitleDisplay.textContent = state.currentTrackSubtitle;
+      
       renderTranscript();
+      renderAnswerKey();
+      updateViewPageButton();
 
       libraryModal.classList.add('hidden');
       loadAudioTrack(`/api/audio/${id}`, true);
@@ -289,7 +343,7 @@ Maya: Perfect. Thank you so much!`
   async function saveTrackToCloudflare(trackData) {
     if (!state.hasKvBackend) return;
     try {
-      setGenerationStatus('Saving audio to Cloudflare KV...');
+      setGenerationStatus('Saving audio, image & answer key to Cloudflare KV...');
       const res = await fetch('/api/tracks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -538,8 +592,82 @@ Maya: Perfect. Thank you so much!`
     });
   }
 
+  // --- TEACHER ANSWER KEY RENDERING ---
+  function renderAnswerKey() {
+    const hasKeys = Array.isArray(state.currentAnswerKey) && state.currentAnswerKey.length > 0;
+    
+    if (hasKeys) {
+      toggleAnswerKeyBtn.classList.remove('hidden');
+      answerKeyBadge.textContent = `Answers (${state.currentAnswerKey.length})`;
+    } else {
+      toggleAnswerKeyBtn.classList.add('hidden');
+      answerKeyBox.classList.add('hidden');
+      return;
+    }
+
+    // Exercise summary
+    if (state.currentExerciseSummary) {
+      exerciseSummaryText.textContent = state.currentExerciseSummary;
+      exerciseSummaryText.classList.remove('hidden');
+    } else {
+      exerciseSummaryText.classList.add('hidden');
+    }
+
+    // Answer items
+    answerKeyList.innerHTML = '';
+    state.currentAnswerKey.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'answer-item';
+      card.innerHTML = `
+        <div class="answer-item-header">
+          <span class="answer-item-q">${escapeHtml(item.item ? `${item.item}. ` : '')}${escapeHtml(item.question || '')}</span>
+          <span class="answer-item-ans">${escapeHtml(item.answer || '')}</span>
+        </div>
+        ${item.clue ? `<div class="answer-item-clue">💡 Clue: "${escapeHtml(item.clue)}"</div>` : ''}
+      `;
+      answerKeyList.appendChild(card);
+    });
+
+    // Teacher notes banner
+    if (state.currentTeacherNotes) {
+      teacherNotesBanner.innerHTML = `<strong>Teacher Note:</strong> ${escapeHtml(state.currentTeacherNotes)}`;
+      teacherNotesBanner.classList.remove('hidden');
+    } else {
+      teacherNotesBanner.classList.add('hidden');
+    }
+  }
+
+  function copyAnswerKeyToClipboard() {
+    if (!state.currentAnswerKey || state.currentAnswerKey.length === 0) return;
+    
+    let text = `${state.currentTrackTitle}\n${state.currentExerciseSummary || ''}\n\n=== ANSWER KEY ===\n`;
+    state.currentAnswerKey.forEach(item => {
+      text += `${item.item ? `${item.item}. ` : ''}${item.question} -> ${item.answer}\n`;
+      if (item.clue) text += `   (Clue: ${item.clue})\n`;
+    });
+    if (state.currentTeacherNotes) {
+      text += `\nTeacher Note: ${state.currentTeacherNotes}\n`;
+    }
+
+    navigator.clipboard.writeText(text).then(() => {
+      copyAnswerKeyBtn.textContent = 'Copied!';
+      setTimeout(() => copyAnswerKeyBtn.textContent = 'Copy', 2000);
+    }).catch(err => {
+      alert('Could not copy to clipboard: ' + err.message);
+    });
+  }
+
+  function updateViewPageButton() {
+    if (state.currentImageUrl) {
+      viewPageBtn.classList.remove('hidden');
+      lightboxImg.src = state.currentImageUrl;
+    } else {
+      viewPageBtn.classList.add('hidden');
+    }
+  }
+
   function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // --- PRESETS LOADING ---
@@ -549,8 +677,12 @@ Maya: Perfect. Thank you so much!`
 
     scriptTextInput.value = p.script;
     deliveryStyleInput.value = p.style;
+    state.currentAnswerKey = p.answerKey || [];
+    state.currentTeacherNotes = p.teacherNotes || '';
+    state.currentExerciseSummary = p.exerciseSummary || '';
+    renderAnswerKey();
     switchTab('scriptTab');
-    setGenerationStatus(`Loaded "${p.title}" preset.`);
+    setGenerationStatus(`Loaded "${p.title}" preset with answer key.`);
   }
 
   // --- MODAL / DRAWER MANAGEMENT ---
@@ -600,11 +732,11 @@ Maya: Perfect. Thank you so much!`
     generationStatusMsg.style.color = isError ? '#ef4444' : 'var(--text-dim)';
   }
 
-  function setGenerating(isGenerating) {
+  function setGenerating(isGenerating, statusText = '') {
     if (isGenerating) {
       actionSpinner.classList.remove('hidden');
       actionPlayIcon.classList.add('hidden');
-      generateBtnText.textContent = 'Synthesizing with Gemini TTS...';
+      generateBtnText.textContent = statusText || 'Processing with Gemini...';
       generateAudioActionBtn.disabled = true;
     } else {
       actionSpinner.classList.add('hidden');
@@ -612,6 +744,279 @@ Maya: Perfect. Thank you so much!`
       generateBtnText.textContent = 'Generate Listening Audio';
       generateAudioActionBtn.disabled = false;
     }
+  }
+
+  // --- IMAGE OPTIMIZATION / RESIZING VIA CANVAS ---
+  function optimizeImage(file, maxDimension = 1280) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) {
+              h = Math.round((h * maxDimension) / w);
+              w = maxDimension;
+            } else {
+              w = Math.round((w * maxDimension) / h);
+              h = maxDimension;
+            }
+          }
+          const c = document.createElement('canvas');
+          c.width = w;
+          c.height = h;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = c.toDataURL('image/jpeg', 0.82);
+          resolve(dataUrl);
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // --- MULTIMODAL: PHOTO TO DIALOGUE + ANSWER KEY ---
+  async function generateFromPhotoWithAI(imageFile) {
+    if (!state.apiKey) {
+      alert('Please enter your Gemini API Key in the settings accordion below.');
+      document.querySelector('.settings-accordion').open = true;
+      apiKeyInput.focus();
+      return;
+    }
+
+    setGenerating(true, 'Step 1/3: Inspecting textbook exercise with Gemini Vision...');
+    setGenerationStatus('Gemini Vision is analyzing questions, gaps, and context...');
+
+    try {
+      // 1. Optimize image
+      const resizedDataUrl = await optimizeImage(imageFile, 1280);
+      const base64Data = resizedDataUrl.split(',')[1];
+      state.currentImageBase64 = resizedDataUrl;
+
+      const gradeLevel = gradeLevelSelect.value;
+      const userFocus = exerciseFocusInput.value.trim();
+
+      const visionPrompt = `You are a master Cambridge Primary English (ESL) curriculum developer and teacher.
+Analyze this textbook exercise page photo carefully.
+The teacher cannot find the audio file for this exercise and needs you to compose the missing listening audio track and compute the exact answer key.
+
+Level: ${gradeLevel}
+${userFocus ? `Specific Exercise Focus: ${userFocus}` : ''}
+
+Instructions:
+1. Examine the page for the listening activity, exercise prompt (e.g., "Listen and tick", "Listen and match", "Listen and fill in the blanks / write a or an / food words").
+2. Write a natural, highly engaging listening dialogue between 2 to 3 characters (or 1 narrator) designed for this exercise.
+   - The dialogue MUST speak naturally and give the exact clues needed to answer the questions or fill in the blanks on this page!
+   - Format dialogue strictly as turns: "Speaker: Line". No stage directions in parentheses.
+3. Solve the exercise and generate the Answer Key for every question/gap/item on the page.
+   - "item": "1", "2", "3", etc.
+   - "question": the item text or prompt
+   - "answer": the clear correct answer
+   - "clue": quote from your generated listening dialogue proving the answer
+4. Provide teacher notes for pacing or vocabulary.
+
+Return strictly a valid JSON object matching this schema:
+{
+  "title": "Exercise / Unit Title",
+  "subtitle": "Character voices & level description",
+  "exerciseSummary": "Brief instruction summary for students",
+  "dialogueTurns": [
+    { "speaker": "SpeakerName", "text": "Verbatim line" }
+  ],
+  "answerKey": [
+    { "item": "1", "question": "Question or gap text", "answer": "Answer", "clue": "Quote from audio" }
+  ],
+  "teacherNotes": "Tip for classroom implementation"
+}`;
+
+      // Call Gemini 3.8 Flash for Multimodal understanding + JSON output
+      const visionRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'image/jpeg',
+                  data: base64Data
+                }
+              },
+              { text: visionPrompt }
+            ]
+          }],
+          generation_config: {
+            response_mime_type: 'application/json'
+          }
+        })
+      });
+
+      if (!visionRes.ok) {
+        const errJson = await visionRes.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `Gemini Vision HTTP ${visionRes.status}`);
+      }
+
+      const visionData = await visionRes.json();
+      const rawJsonText = visionData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const analysis = JSON.parse(rawJsonText);
+
+      if (!analysis.dialogueTurns || analysis.dialogueTurns.length === 0) {
+        throw new Error('Gemini could not identify or generate dialogue turns from this image.');
+      }
+
+      setGenerating(true, 'Step 2/3: Synthesizing voices with Gemini 3.8 TTS...');
+      setGenerationStatus('Generating audio with natural pauses and pronunciation...');
+
+      // 2. Synthesize audio with Gemini 3.8 TTS
+      const turns = analysis.dialogueTurns;
+      const audioResult = await callGeminiTts(turns, deliveryStyleInput.value.trim());
+
+      // 3. Update State
+      state.currentTrackTitle = analysis.title || 'Textbook Exercise Listening';
+      state.currentTrackSubtitle = analysis.subtitle || `${gradeLevel}`;
+      state.currentExerciseSummary = analysis.exerciseSummary || '';
+      state.currentTranscript = turns;
+      state.currentAnswerKey = analysis.answerKey || [];
+      state.currentTeacherNotes = analysis.teacherNotes || '';
+      state.currentImageUrl = resizedDataUrl;
+      state.audioBlob = audioResult.blob;
+      state.audioUrl = audioResult.objectUrl;
+
+      // Update UI
+      trackTitleDisplay.textContent = state.currentTrackTitle;
+      trackSubtitleDisplay.textContent = state.currentTrackSubtitle;
+      renderTranscript();
+      renderAnswerKey();
+      updateViewPageButton();
+      closeModal();
+      loadAudioTrack(audioResult.objectUrl, true);
+
+      // 4. Save to Cloudflare KV
+      if (saveToCloudflareCheckbox.checked) {
+        const trackId = 'track_' + Date.now();
+        saveTrackToCloudflare({
+          id: trackId,
+          title: state.currentTrackTitle,
+          subtitle: state.currentTrackSubtitle,
+          exerciseSummary: state.currentExerciseSummary,
+          style: deliveryStyleInput.value.trim(),
+          transcript: turns,
+          answerKey: state.currentAnswerKey,
+          teacherNotes: state.currentTeacherNotes,
+          audioBase64: audioResult.base64,
+          imageBase64: base64Data
+        });
+      }
+
+    } catch (err) {
+      console.error(err);
+      setGenerationStatus(`Photo Generation Error: ${err.message}`, true);
+      alert('Error generating from photo: ' + err.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // --- GEMINI 3.8 TTS SYNTHESIS HELPER ---
+  async function callGeminiTts(turns, styleDirection) {
+    const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
+    const voice1 = voice1Select.value;
+    const voice2 = voice2Select.value;
+    const voice3 = voice3Select.value;
+    const voiceChoices = [voice1, voice2, voice3, 'Zephyr', 'Fenrir', 'Charon'];
+
+    const speakerConfigs = uniqueSpeakers.map((spk, i) => {
+      return {
+        speaker: spk,
+        voice: voiceChoices[i % voiceChoices.length]
+      };
+    });
+
+    const model = ttsModelSelect.value || 'gemini-3.8-flash-tts';
+
+    const contentItems = turns.map(t => {
+      return {
+        type: 'text',
+        text: t.text,
+        annotations: [
+          {
+            type: 'speech_metadata',
+            speaker: t.speaker,
+            style: styleDirection || 'Clear enunciation for ESL learners'
+          }
+        ]
+      };
+    });
+
+    const payload = {
+      model: model,
+      input: [
+        {
+          type: 'user_input',
+          content: contentItems
+        }
+      ],
+      response_format: { type: 'audio' },
+      generation_config: {
+        speech_config: {
+          speakers: speakerConfigs
+        }
+      }
+    };
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const responseData = await res.json();
+    let base64Audio = null;
+
+    if (responseData.output_audio && responseData.output_audio.data) {
+      base64Audio = responseData.output_audio.data;
+    } else if (Array.isArray(responseData.steps)) {
+      for (const step of responseData.steps) {
+        if (step.type === 'model_output' && Array.isArray(step.content)) {
+          for (const item of step.content) {
+            if (item.type === 'audio' && item.data) {
+              base64Audio = item.data;
+              break;
+            }
+          }
+        }
+        if (base64Audio) break;
+      }
+    }
+
+    if (!base64Audio) {
+      throw new Error('Gemini TTS returned no audio data. Check your model quota.');
+    }
+
+    const byteCharacters = atob(base64Audio);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'audio/wav' });
+    const objectUrl = URL.createObjectURL(blob);
+
+    return {
+      blob,
+      objectUrl,
+      base64: base64Audio
+    };
   }
 
   // --- SCRIPT PARSER ---
@@ -651,7 +1056,7 @@ Maya: Perfect. Thank you so much!`
       return;
     }
 
-    setGenerationStatus('Gemini is writing the dialogue script...');
+    setGenerationStatus('Gemini is writing the dialogue and answer key...');
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
         method: 'POST',
@@ -659,15 +1064,25 @@ Maya: Perfect. Thank you so much!`
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are an expert Cambridge Primary English (ESL) curriculum developer. Write a dialogue script based on this request:
+              text: `You are an expert Cambridge Primary English (ESL) curriculum developer. Write a dialogue script and answer key based on this request:
 "${prompt}"
 
-Rules:
-1. Format each line strictly as "Speaker: Line". No markdown, no asterisks, no stage directions in parentheses.
-2. Keep vocabulary natural, age-appropriate, and clearly enunciated for listening practice.
-3. Maximum 6 to 10 dialogue turns total.`
+Return strictly valid JSON:
+{
+  "title": "Topic Title",
+  "subtitle": "Character voices & level",
+  "exerciseSummary": "Student instructions",
+  "dialogueTurns": [
+    { "speaker": "SpeakerName", "text": "Line to speak" }
+  ],
+  "answerKey": [
+    { "item": "1", "question": "Question", "answer": "Answer", "clue": "Audio clue" }
+  ],
+  "teacherNotes": "Tip"
+}`
             }]
-          }]
+          }],
+          generation_config: { response_mime_type: 'application/json' }
         })
       });
 
@@ -677,85 +1092,39 @@ Rules:
       }
 
       const data = await res.json();
-      const generatedScript = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(rawText);
       
-      scriptTextInput.value = generatedScript.trim();
+      scriptTextInput.value = (parsed.dialogueTurns || []).map(t => `${t.speaker}: ${t.text}`).join('\n');
+      state.currentAnswerKey = parsed.answerKey || [];
+      state.currentTeacherNotes = parsed.teacherNotes || '';
+      state.currentExerciseSummary = parsed.exerciseSummary || '';
+      renderAnswerKey();
+
       switchTab('scriptTab');
-      setGenerationStatus('Draft script created! Review below and click Generate.');
+      setGenerationStatus('Draft script & answers created! Review below and click Generate.');
     } catch (err) {
       console.error(err);
       setGenerationStatus(`Failed to draft script: ${err.message}`, true);
     }
   }
 
-  // --- BOOK PHOTO / OCR VIA GEMINI VISION ---
-  async function extractTextFromBookImage(file) {
-    if (!state.apiKey) {
-      alert('Please enter your Gemini API Key in the settings accordion below.');
+  // --- GENERAL GENERATE ACTION DISPATCHER ---
+  async function handleGenerateAudioAction() {
+    // If in photo tab and image is attached, run full multimodal pipeline
+    if (state.activeTab === 'photoTab' && currentUploadedImageFile) {
+      await generateFromPhotoWithAI(currentUploadedImageFile);
       return;
     }
 
-    setGenerationStatus('Gemini Vision is reading the textbook page...');
-    
-    const base64Data = await fileToBase64(file);
-    const mimeType = file.type || 'image/jpeg';
-
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data.split(',')[1]
-                }
-              },
-              {
-                text: `Extract all dialogue or speech bubbles from this textbook photo.
-Format strictly as:
-Speaker: Sentence
-If speaker names are not shown, use Speaker 1, Speaker 2, etc.
-Output ONLY the clean dialogue lines without markdown or explanations.`
-              }
-            ]
-          }]
-        })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error?.message || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      
-      scriptTextInput.value = extractedText.trim();
-      switchTab('scriptTab');
-      setGenerationStatus('Dialogue successfully extracted from textbook! Click Generate.');
-    } catch (err) {
-      console.error(err);
-      setGenerationStatus(`OCR Extraction failed: ${err.message}`, true);
-    }
-  }
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // --- CORE GEMINI TTS GENERATION ---
-  async function generateListeningAudio() {
+    // Otherwise, generate from script text
     const scriptText = scriptTextInput.value.trim();
     if (!scriptText) {
-      alert('Please enter or draft dialogue text before generating.');
+      if (state.activeTab === 'photoTab') {
+        alert('Please attach an exercise photo or switch to the Script tab to paste text.');
+      } else {
+        alert('Please enter or draft dialogue text before generating.');
+      }
       return;
     }
 
@@ -778,117 +1147,26 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
       return;
     }
 
-    setGenerating(true);
+    setGenerating(true, 'Synthesizing audio with Gemini 3.8 TTS...');
     setGenerationStatus('Connecting to Gemini 3.8 TTS API...');
 
-    const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
-    const voice1 = voice1Select.value;
-    const voice2 = voice2Select.value;
-    const voice3 = voice3Select.value;
-    const voiceChoices = [voice1, voice2, voice3, 'Zephyr', 'Fenrir', 'Charon'];
-
-    const speakerConfigs = uniqueSpeakers.map((spk, i) => {
-      return {
-        speaker: spk,
-        voice: voiceChoices[i % voiceChoices.length]
-      };
-    });
-
-    const styleDirection = deliveryStyleInput.value.trim() || 'Clear enunciation for ESL learners';
-    const model = ttsModelSelect.value || 'gemini-3.8-flash-tts';
-
-    const contentItems = turns.map(t => {
-      return {
-        type: 'text',
-        text: t.text,
-        annotations: [
-          {
-            type: 'speech_metadata',
-            speaker: t.speaker,
-            style: styleDirection
-          }
-        ]
-      };
-    });
-
-    const payload = {
-      model: model,
-      input: [
-        {
-          type: 'user_input',
-          content: contentItems
-        }
-      ],
-      response_format: { type: 'audio' },
-      generation_config: {
-        speech_config: {
-          speakers: speakerConfigs
-        }
-      }
-    };
-
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const styleDirection = deliveryStyleInput.value.trim() || 'Clear enunciation for ESL learners';
+      const audioResult = await callGeminiTts(turns, styleDirection);
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const responseData = await res.json();
-      let base64Audio = null;
-
-      if (responseData.output_audio && responseData.output_audio.data) {
-        base64Audio = responseData.output_audio.data;
-      } else if (Array.isArray(responseData.steps)) {
-        for (const step of responseData.steps) {
-          if (step.type === 'model_output' && Array.isArray(step.content)) {
-            for (const item of step.content) {
-              if (item.type === 'audio' && item.data) {
-                base64Audio = item.data;
-                break;
-              }
-            }
-          }
-          if (base64Audio) break;
-        }
-      }
-
-      if (!base64Audio) {
-        throw new Error('Gemini API succeeded but returned no audio bytes. Check model quota or parameters.');
-      }
-
-      // Convert Base64 to Blob
-      const byteCharacters = atob(base64Audio);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'audio/wav' });
-      const objectUrl = URL.createObjectURL(blob);
-
-      // Unique ID for Cloudflare KV storage
-      const trackId = 'track_' + Date.now();
-
-      // Title & Subtitle
+      const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
       let trackTitle = '';
       let trackSubtitle = '';
       if (uniqueSpeakers.length > 1) {
         trackTitle = `${uniqueSpeakers.join(' & ')}: Listening Dialogue`;
-        trackSubtitle = `${uniqueSpeakers.map((s, i) => `${s} (${speakerConfigs[i].voice})`).join(' • ')}`;
+        trackSubtitle = `${uniqueSpeakers.join(' • ')} • Cambridge ESL`;
       } else {
         trackTitle = `${uniqueSpeakers[0] || 'Narration'}: Listening Audio`;
-        trackSubtitle = `Voice: ${speakerConfigs[0].voice} • ${styleDirection}`;
+        trackSubtitle = `Voice Narration • ${styleDirection}`;
       }
 
-      // Update state & UI
-      state.audioBlob = blob;
-      state.audioUrl = objectUrl;
+      state.audioBlob = audioResult.blob;
+      state.audioUrl = audioResult.objectUrl;
       state.currentTranscript = turns;
       state.currentTrackTitle = trackTitle;
       state.currentTrackSubtitle = trackSubtitle;
@@ -897,23 +1175,27 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
       trackSubtitleDisplay.textContent = state.currentTrackSubtitle;
 
       renderTranscript();
+      renderAnswerKey();
       closeModal();
-      loadAudioTrack(objectUrl, true);
+      loadAudioTrack(audioResult.objectUrl, true);
 
-      // Save to Cloudflare KV if checked
       if (saveToCloudflareCheckbox.checked) {
+        const trackId = 'track_' + Date.now();
         saveTrackToCloudflare({
           id: trackId,
           title: trackTitle,
           subtitle: trackSubtitle,
+          exerciseSummary: state.currentExerciseSummary,
           style: styleDirection,
           transcript: turns,
-          audioBase64: base64Audio
+          answerKey: state.currentAnswerKey,
+          teacherNotes: state.currentTeacherNotes,
+          audioBase64: audioResult.base64
         });
       }
 
     } catch (err) {
-      console.error('Gemini TTS error:', err);
+      console.error(err);
       setGenerationStatus(`Error: ${err.message}`, true);
     } finally {
       setGenerating(false);
@@ -937,6 +1219,24 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
     jumpForwardBtn.addEventListener('click', () => seekRelative(5));
     loopToggleBtn.addEventListener('click', toggleLoop);
     downloadAudioBtn.addEventListener('click', downloadAudio);
+
+    // Answer Key & Lightbox
+    toggleAnswerKeyBtn.addEventListener('click', () => {
+      answerKeyBox.classList.toggle('hidden');
+      toggleAnswerKeyBtn.classList.toggle('active', !answerKeyBox.classList.contains('hidden'));
+    });
+    closeAnswerKeyBtn.addEventListener('click', () => {
+      answerKeyBox.classList.add('hidden');
+      toggleAnswerKeyBtn.classList.remove('active');
+    });
+    copyAnswerKeyBtn.addEventListener('click', copyAnswerKeyToClipboard);
+
+    viewPageBtn.addEventListener('click', () => {
+      lightboxModal.classList.remove('hidden');
+    });
+    closeLightboxBtn.addEventListener('click', () => {
+      lightboxModal.classList.add('hidden');
+    });
 
     // Speed Selector
     speedPills.forEach(pill => {
@@ -968,7 +1268,6 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
       isDragging = false;
     });
 
-    // Touch support for scrubber
     timelineBar.addEventListener('touchstart', (e) => {
       if (e.touches.length > 0) {
         seekFromEvent(e.touches[0]);
@@ -1043,38 +1342,43 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
       e.preventDefault();
       uploadDropzone.style.borderColor = 'var(--surface-border)';
       if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleImageFile(e.dataTransfer.files[0]);
+        handleSelectedImage(e.dataTransfer.files[0]);
       }
     });
 
     bookImageInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
-        handleImageFile(e.target.files[0]);
+        handleSelectedImage(e.target.files[0]);
       }
     });
 
-    let currentSelectedImage = null;
-    function handleImageFile(file) {
-      currentSelectedImage = file;
+    removeImageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentUploadedImageFile = null;
+      bookImageInput.value = '';
+      imagePreviewArea.classList.add('hidden');
+      dropzoneEmptyView.classList.remove('hidden');
+      generateBtnText.textContent = 'Generate Listening Audio';
+    });
+
+    function handleSelectedImage(file) {
+      currentUploadedImageFile = file;
       const url = URL.createObjectURL(file);
       imagePreviewImg.src = url;
+      dropzoneEmptyView.classList.add('hidden');
       imagePreviewArea.classList.remove('hidden');
+      generateBtnText.textContent = 'Generate Audio & Answer Key from Picture';
+      setGenerationStatus('Photo loaded. Click below to analyze and generate!');
     }
 
-    extractImageTextBtn.addEventListener('click', () => {
-      if (currentSelectedImage) {
-        extractTextFromBookImage(currentSelectedImage);
-      }
-    });
-
-    // Action Generate
-    generateAudioActionBtn.addEventListener('click', generateListeningAudio);
+    // Action Generate Dispatcher
+    generateAudioActionBtn.addEventListener('click', handleGenerateAudioAction);
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          generateListeningAudio();
+          handleGenerateAudioAction();
         }
         return;
       }
@@ -1094,6 +1398,14 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
         setSpeed(1.0);
       } else if (e.key === '3') {
         setSpeed(1.2);
+      } else if (e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        answerKeyBox.classList.toggle('hidden');
+        toggleAnswerKeyBtn.classList.toggle('active', !answerKeyBox.classList.contains('hidden'));
+      } else if (e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        transcriptBox.classList.toggle('hidden');
+        toggleTranscriptBtn.classList.toggle('active', !transcriptBox.classList.contains('hidden'));
       } else if (e.key.toLowerCase() === 'n') {
         e.preventDefault();
         openModal();
@@ -1103,6 +1415,7 @@ Output ONLY the clean dialogue lines without markdown or explanations.`
       } else if (e.key === 'Escape') {
         closeModal();
         closeLibrary();
+        lightboxModal.classList.add('hidden');
       }
     });
   }
