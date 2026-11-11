@@ -30,6 +30,7 @@
     currentImageBase64: null,
     savedTracks: [],
     apiKey: localStorage.getItem('listening_gemini_api_key') || '',
+    hasServerKey: false,
     activeTab: 'photoTab',
     hasKvBackend: false
   };
@@ -227,6 +228,19 @@ Maya: Perfect, there we go. Thank you so much!`,
   // --- CLOUDFLARE KV SYNC & STORAGE ---
   async function checkKvBackend() {
     try {
+      const configRes = await fetch('/api/config').catch(() => null);
+      if (configRes && configRes.ok) {
+        const configData = await configRes.json();
+        state.hasServerKey = !!configData.hasServerKey;
+        if (state.hasServerKey && !state.apiKey) {
+          const keyHint = document.querySelector('.key-hint');
+          if (keyHint) {
+            keyHint.textContent = '✓ Cloudflare Worker Gemini API Key is configured and active.';
+            keyHint.style.color = '#10b981';
+          }
+        }
+      }
+
       const res = await fetch('/api/tracks');
       if (res.ok) {
         state.hasKvBackend = true;
@@ -962,10 +976,10 @@ Maya: Perfect, there we go. Thank you so much!`,
     const voice2 = voice2Select.value;
     const voice3 = voice3Select.value;
     const voiceChoices = [voice1, voice2, voice3, 'Fenrir', 'Zephyr', 'Kore', 'Puck', 'Aoede', 'Charon'];
-    const model = ttsModelSelect.value || 'gemini-3.8-flash-tts';
+    const model = ttsModelSelect.value || 'gemini-3.1-flash-tts-preview';
 
-    // Helper: Single speaker API request
-    async function requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel) {
+    // Helper: Single speaker API request with auto-retry and model fallback
+    async function requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel, activeModel = model) {
       const annotations = [];
       const cleanStyle = (styleDirection || '').trim();
       if (cleanStyle) {
@@ -984,7 +998,7 @@ Maya: Perfect, there we go. Thank you so much!`,
       }
 
       const payload = {
-        model: model,
+        model: activeModel,
         input: [
           {
             type: 'user_input',
@@ -993,29 +1007,52 @@ Maya: Perfect, there we go. Thank you so much!`,
         ],
         response_format: { type: 'audio' },
         generation_config: {
-          speech_config: {
-            voice_config: {
-              prebuilt_voice_config: {
-                voice_name: voiceName
-              }
-            }
-          }
+          speech_config: [
+            { voice: voiceName }
+          ]
         }
       };
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const fetchUrl = state.apiKey
+          ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
+          : `/api/tts`;
+        const fetchHeaders = { 'Content-Type': 'application/json' };
+        if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
 
-      if (!res.ok) {
+        const res = await fetch(fetchUrl, {
+          method: 'POST',
+          headers: fetchHeaders,
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const responseData = await res.json();
+          return extractAudioBase64(responseData);
+        }
+
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`);
-      }
+        const errMsg = errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`;
 
-      const responseData = await res.json();
-      return extractAudioBase64(responseData);
+        // 1. If daily quota exhausted on 3.8, seamlessly switch to 3.1
+        if (res.status === 429 && (errMsg.includes('per day') || errMsg.includes('daily')) && activeModel !== 'gemini-3.1-flash-tts-preview') {
+          console.warn(`${activeModel} daily quota limit reached, automatically switching to gemini-3.1-flash-tts-preview...`);
+          setGenerationStatus('Auto-switching to gemini-3.1-flash-tts-preview (daily quota limit on 3.8)...');
+          return requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel, 'gemini-3.1-flash-tts-preview');
+        }
+
+        // 2. If per-minute rate limit hit (e.g. 3 req/min on Free Tier), pause and retry
+        if (res.status === 429 && attempt < 3) {
+          console.warn('Per-minute rate limit encountered, waiting for window reset...');
+          for (let sec = 20; sec > 0; sec--) {
+            setGenerationStatus(`Free-tier rate limit reached. Pausing ${sec}s before next speaker...`);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          continue;
+        }
+
+        throw new Error(errMsg);
+      }
     }
 
     function extractAudioBase64(responseData) {
@@ -1094,9 +1131,15 @@ Maya: Perfect, there we go. Thank you so much!`,
           }
         };
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`, {
+        const fetchUrl = state.apiKey
+          ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
+          : `/api/tts`;
+        const fetchHeaders = { 'Content-Type': 'application/json' };
+        if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
+
+        const res = await fetch(fetchUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: fetchHeaders,
           body: JSON.stringify(payload)
         });
 
@@ -1147,7 +1190,7 @@ Maya: Perfect, there we go. Thank you so much!`,
 
   // --- MULTIMODAL: PHOTO TO DIALOGUE + ANSWER KEY ---
   async function generateFromPhotoWithAI(imageFile) {
-    if (!state.apiKey) {
+    if (!state.apiKey && !state.hasServerKey) {
       alert('Please enter your Gemini API Key in the settings accordion below.');
       document.querySelector('.settings-accordion').open = true;
       apiKeyInput.focus();
@@ -1198,25 +1241,31 @@ Return strictly a valid JSON object matching this schema:
   "teacherNotes": "Tip for classroom implementation"
 }`;
 
-      const visionRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+      const visionPayload = {
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: base64Data
+              }
+            },
+            { text: visionPrompt }
+          ]
+        }],
+        generation_config: {
+          response_mime_type: 'application/json'
+        }
+      };
+
+      const visionFetchUrl = state.apiKey
+        ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`
+        : `/api/generate`;
+
+      const visionRes = await fetch(visionFetchUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                inline_data: {
-                  mime_type: 'image/jpeg',
-                  data: base64Data
-                }
-              },
-              { text: visionPrompt }
-            ]
-          }],
-          generation_config: {
-            response_mime_type: 'application/json'
-          }
-        })
+        body: JSON.stringify(state.apiKey ? visionPayload : { model: 'gemini-3.8-flash', payload: visionPayload })
       });
 
       if (!visionRes.ok) {
@@ -1289,20 +1338,17 @@ Return strictly a valid JSON object matching this schema:
       return;
     }
 
-    if (!state.apiKey) {
+    if (!state.apiKey && !state.hasServerKey) {
       alert('Please enter your Gemini API Key in the settings accordion below.');
       return;
     }
 
     setGenerationStatus('Gemini is writing the dialogue and answer key...');
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are an expert Cambridge Primary English (ESL) curriculum developer. Write a dialogue script and answer key based on this request:
+      const draftPayload = {
+        contents: [{
+          parts: [{
+            text: `You are an expert Cambridge Primary English (ESL) curriculum developer. Write a dialogue script and answer key based on this request:
 "${prompt}"
 
 Return strictly valid JSON:
@@ -1318,10 +1364,19 @@ Return strictly valid JSON:
   ],
   "teacherNotes": "Tip"
 }`
-            }]
-          }],
-          generation_config: { response_mime_type: 'application/json' }
-        })
+          }]
+        }],
+        generation_config: { response_mime_type: 'application/json' }
+      };
+
+      const draftFetchUrl = state.apiKey
+        ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`
+        : `/api/generate`;
+
+      const res = await fetch(draftFetchUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.apiKey ? draftPayload : { model: 'gemini-3.8-flash', payload: draftPayload })
       });
 
       if (!res.ok) {
@@ -1366,7 +1421,7 @@ Return strictly valid JSON:
       return;
     }
 
-    if (!state.apiKey) {
+    if (!state.apiKey && !state.hasServerKey) {
       const useSample = confirm('No Gemini API Key found. Would you like to load the bundled sample listening track (Leo & Maya dialogue) now, or enter your API key?');
       if (useSample) {
         closeModal();

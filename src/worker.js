@@ -228,7 +228,7 @@ export default {
         return json({ success: true, deletedId: id });
       }
 
-      // 7. POST /api/tts - Server-side Gemini 3.8 TTS proxy
+      // 7. POST /api/tts - Server-side Gemini 3.8 / 3.1 TTS proxy
       if (path === '/api/tts' && method === 'POST') {
         const apiKey = env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
         if (!apiKey) {
@@ -242,13 +242,35 @@ export default {
           body: JSON.stringify(payload)
         });
 
-        if (!geminiRes.ok) {
-          const errText = await geminiRes.text();
-          return json({ error: `Gemini API error: ${errText}` }, geminiRes.status);
+        const data = await geminiRes.json();
+        return json(data, geminiRes.status);
+      }
+
+      // 8. POST /api/generate - Server-side Gemini Vision & Text drafting proxy
+      if (path === '/api/generate' && method === 'POST') {
+        const apiKey = env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
+        if (!apiKey) {
+          return json({ error: 'Missing Gemini API key on server. Set GEMINI_API_KEY secret or pass x-gemini-key header.' }, 401);
         }
 
+        const body = await request.json();
+        const model = body.model || 'gemini-3.8-flash';
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body.payload || body)
+        });
+
         const data = await geminiRes.json();
-        return json(data);
+        return json(data, geminiRes.status);
+      }
+
+      // 9. GET /api/config - Public configuration status
+      if (path === '/api/config' && method === 'GET') {
+        return json({
+          hasServerKey: !!env.GEMINI_API_KEY,
+          hasKv: !!env.LISTENING_DATA
+        });
       }
 
       return json({ error: 'Endpoint not found' }, 404);
