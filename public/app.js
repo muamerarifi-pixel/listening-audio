@@ -906,16 +906,17 @@ Maya: Perfect, there we go. Thank you so much!`,
       };
 
       for (let attempt = 1; attempt <= 3; attempt++) {
-        const fetchUrl = state.apiKey
-          ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
-          : `/api/tts`;
-        const fetchHeaders = { 'Content-Type': 'application/json' };
-        if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
+        // Route through worker proxy /api/tts to eliminate CORS preflight "Failed to fetch"
+        const fetchBody = {
+          ...payload,
+          model: activeModel,
+          apiKey: state.apiKey || undefined
+        };
 
-        const res = await fetch(fetchUrl, {
+        const res = await fetch('/api/tts', {
           method: 'POST',
-          headers: fetchHeaders,
-          body: JSON.stringify(payload)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fetchBody)
         });
 
         if (res.ok) {
@@ -1024,16 +1025,16 @@ Maya: Perfect, there we go. Thank you so much!`,
             }
           };
 
-          const fetchUrl = state.apiKey
-            ? `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(state.apiKey)}`
-            : `/api/tts`;
-          const fetchHeaders = { 'Content-Type': 'application/json' };
-          if (state.apiKey) fetchHeaders['x-gemini-key'] = state.apiKey;
+          const fetchBody = {
+            ...payload,
+            model: targetModel,
+            apiKey: state.apiKey || undefined
+          };
 
-          const res = await fetch(fetchUrl, {
+          const res = await fetch('/api/tts', {
             method: 'POST',
-            headers: fetchHeaders,
-            body: JSON.stringify(payload)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fetchBody)
           });
 
           if (!res.ok) {
@@ -1160,14 +1161,14 @@ Return strictly a valid JSON object matching this schema:
         }
       };
 
-      const visionFetchUrl = state.apiKey
-        ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`
-        : `/api/generate`;
-
-      const visionRes = await fetch(visionFetchUrl, {
+      const visionRes = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state.apiKey ? visionPayload : { model: 'gemini-3.8-flash', payload: visionPayload })
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash',
+          payload: visionPayload,
+          apiKey: state.apiKey || undefined
+        })
       });
 
       if (!visionRes.ok) {
@@ -1271,14 +1272,14 @@ Return strictly valid JSON:
         generation_config: { response_mime_type: 'application/json' }
       };
 
-      const draftFetchUrl = state.apiKey
-        ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`
-        : `/api/generate`;
-
-      const res = await fetch(draftFetchUrl, {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state.apiKey ? draftPayload : { model: 'gemini-3.8-flash', payload: draftPayload })
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash',
+          payload: draftPayload,
+          apiKey: state.apiKey || undefined
+        })
       });
 
       if (!res.ok) {

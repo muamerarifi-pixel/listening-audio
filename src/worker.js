@@ -230,16 +230,17 @@ export default {
 
       // 7. POST /api/tts - Server-side Gemini 3.8 / 3.1 TTS proxy
       if (path === '/api/tts' && method === 'POST') {
-        const apiKey = env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
+        const body = await request.json();
+        const apiKey = body.apiKey || env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
         if (!apiKey) {
           return json({ error: 'Missing Gemini API key on server. Set GEMINI_API_KEY secret or pass x-gemini-key header.' }, 401);
         }
+        delete body.apiKey;
 
-        const payload = await request.json();
         const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(body)
         });
 
         const data = await geminiRes.json();
@@ -248,13 +249,14 @@ export default {
 
       // 8. POST /api/generate - Server-side Gemini Vision & Text drafting proxy
       if (path === '/api/generate' && method === 'POST') {
-        const apiKey = env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
+        const body = await request.json();
+        const apiKey = body.apiKey || env.GEMINI_API_KEY || request.headers.get('x-gemini-key');
         if (!apiKey) {
           return json({ error: 'Missing Gemini API key on server. Set GEMINI_API_KEY secret or pass x-gemini-key header.' }, 401);
         }
+        delete body.apiKey;
 
-        const body = await request.json();
-        const model = body.model || 'gemini-3.8-flash';
+        const model = body.model || 'gemini-2.5-flash';
         const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
