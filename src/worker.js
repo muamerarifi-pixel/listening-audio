@@ -267,10 +267,61 @@ export default {
         return json(data, geminiRes.status);
       }
 
-      // 9. GET /api/config - Public configuration status
+      // 9. POST /api/elevenlabs/tts - Server-side ElevenLabs TTS proxy
+      if (path === '/api/elevenlabs/tts' && method === 'POST') {
+        const body = await request.json();
+        const apiKey = body.apiKey || env.ELEVENLABS_API_KEY || request.headers.get('xi-api-key');
+        if (!apiKey) {
+          return json({ error: 'Missing ElevenLabs API key. Please enter your ElevenLabs API key in Settings.' }, 401);
+        }
+
+        const voiceId = body.voiceId || '21m00Tcm4TlvDq8ikWAM'; // Rachel
+        const text = body.text || '';
+        const modelId = body.modelId || 'eleven_multilingual_v2';
+
+        const elevenRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': apiKey,
+            'Accept': 'audio/mpeg'
+          },
+          body: JSON.stringify({
+            text,
+            model_id: modelId,
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75
+            }
+          })
+        });
+
+        if (!elevenRes.ok) {
+          const errData = await elevenRes.json().catch(() => ({}));
+          return json({ error: errData.detail?.message || `ElevenLabs error (${elevenRes.status})` }, elevenRes.status);
+        }
+
+        const audioBuffer = await elevenRes.arrayBuffer();
+        const bytes = new Uint8Array(audioBuffer);
+        let binaryStr = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binaryStr += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binaryStr);
+
+        return json({
+          success: true,
+          audioBase64: base64,
+          mimeType: 'audio/mpeg'
+        });
+      }
+
+      // 10. GET /api/config - Public configuration status
       if (path === '/api/config' && method === 'GET') {
         return json({
           hasServerKey: !!env.GEMINI_API_KEY,
+          hasElevenLabsKey: !!env.ELEVENLABS_API_KEY,
           hasKv: !!env.LISTENING_DATA
         });
       }

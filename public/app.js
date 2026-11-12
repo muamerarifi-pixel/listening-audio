@@ -30,6 +30,8 @@
     currentImageBase64: null,
     savedTracks: [],
     apiKey: localStorage.getItem('listening_gemini_api_key') || '',
+    elevenApiKey: localStorage.getItem('listening_eleven_api_key') || '',
+    ttsEngine: localStorage.getItem('listening_tts_engine') || 'gemini',
     hasServerKey: false,
     activeTab: 'photoTab',
     hasKvBackend: false
@@ -117,6 +119,7 @@ Maya: Perfect, there we go. Thank you so much!`,
   
   // Library Modal Elements
   const savedTracksBtn = document.getElementById('savedTracksBtn');
+  const openSettingsBtn = document.getElementById('openSettingsBtn');
   const libraryModal = document.getElementById('libraryModal');
   const closeLibraryBtn = document.getElementById('closeLibraryBtn');
   const refreshLibraryBtn = document.getElementById('refreshLibraryBtn');
@@ -147,8 +150,11 @@ Maya: Perfect, there we go. Thank you so much!`,
 
   const deliveryStyleInput = document.getElementById('deliveryStyleInput');
   const saveToCloudflareCheckbox = document.getElementById('saveToCloudflareCheckbox');
+  const ttsEngineSelect = document.getElementById('ttsEngineSelect');
   const apiKeyInput = document.getElementById('apiKeyInput');
   const saveKeyBtn = document.getElementById('saveKeyBtn');
+  const elevenApiKeyInput = document.getElementById('elevenApiKeyInput');
+  const saveElevenKeyBtn = document.getElementById('saveElevenKeyBtn');
   const ttsModelSelect = document.getElementById('ttsModelSelect');
   
   const generateAudioActionBtn = document.getElementById('generateAudioActionBtn');
@@ -631,16 +637,31 @@ Maya: Perfect, there we go. Thank you so much!`,
   function switchTab(tabId) {}
 
   function loadSavedSettings() {
-    if (state.apiKey) {
+    if (state.apiKey && apiKeyInput) {
       apiKeyInput.value = state.apiKey;
+    }
+    if (state.elevenApiKey && elevenApiKeyInput) {
+      elevenApiKeyInput.value = state.elevenApiKey;
+    }
+    if (ttsEngineSelect) {
+      ttsEngineSelect.value = state.ttsEngine || 'gemini';
     }
   }
 
   function saveApiKey() {
-    const val = apiKeyInput.value.trim();
+    const val = (apiKeyInput?.value || '').trim();
     state.apiKey = val;
     localStorage.setItem('listening_gemini_api_key', val);
-    setGenerationStatus('API key saved locally.');
+    setGenerationStatus('Gemini API key saved locally.');
+    alert('Gemini API key saved!');
+  }
+
+  function saveElevenApiKey() {
+    const val = (elevenApiKeyInput?.value || '').trim();
+    state.elevenApiKey = val;
+    localStorage.setItem('listening_eleven_api_key', val);
+    setGenerationStatus('ElevenLabs API key saved locally.');
+    alert('ElevenLabs API key saved!');
   }
 
   function setGenerationStatus(msg, isError = false) {
@@ -862,6 +883,15 @@ Maya: Perfect, there we go. Thank you so much!`,
     { id: 'Zephyr', name: 'Zephyr (Soft, gentle male)', gender: 'male' }
   ];
 
+  const ELEVENLABS_VOICES = [
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (Calm, natural female)', gender: 'female' },
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (Warm, expressive female)', gender: 'female' },
+    { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam (Deep, warm narrator male)', gender: 'male' },
+    { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni (Crisp, friendly male)', gender: 'male' },
+    { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh (Conversational male)', gender: 'male' },
+    { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (Authoritative male)', gender: 'male' }
+  ];
+
   function detectGender(speakerName, sampleText = '') {
     const cleanName = speakerName.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
     const tokens = cleanName.split(/\s+/);
@@ -1002,8 +1032,13 @@ Maya: Perfect, there we go. Thank you so much!`,
       recommendedStyle = 'Clear, natural enunciation for Cambridge English listening comprehension exams, with distinct pauses between speakers';
     }
 
-    const femaleVoicePool = ['Aoede', 'Kore'];
-    const maleVoicePool = ['Puck', 'Fenrir', 'Charon', 'Zephyr'];
+    const isEleven = state.ttsEngine === 'elevenlabs';
+    const femaleVoicePool = isEleven
+      ? ['21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL'] // Rachel, Bella
+      : ['Aoede', 'Kore'];
+    const maleVoicePool = isEleven
+      ? ['pNInz6obpgDQGcFmaJgB', 'ErXwobaYiN019PkySvjV', 'TxGEqnHWrfWFTfGW9XjX', 'VR6AewLTigWG4xSOukaG'] // Adam, Antoni, Josh, Arnold
+      : ['Puck', 'Fenrir', 'Charon', 'Zephyr'];
     let femaleIdx = 0;
     let maleIdx = 0;
 
@@ -1013,11 +1048,11 @@ Maya: Perfect, there we go. Thank you so much!`,
       const sampleText = spkTurns.map(t => t.text).join(' ');
 
       let gender = 'neutral';
-      let voice = 'Puck';
+      let voice = isEleven ? 'pNInz6obpgDQGcFmaJgB' : 'Puck';
 
       if (spkName === 'Literature') {
         gender = 'narrator';
-        voice = 'Charon';
+        voice = isEleven ? 'pNInz6obpgDQGcFmaJgB' : 'Charon';
       } else {
         const detected = detectGender(spkName, sampleText);
         if (detected !== 'neutral') {
@@ -1057,8 +1092,10 @@ Maya: Perfect, there we go. Thank you so much!`,
   }
 
   function renderVoiceOptions(activeVoice) {
-    const femaleVoices = GEMINI_VOICES.filter(v => v.gender === 'female');
-    const maleVoices = GEMINI_VOICES.filter(v => v.gender === 'male');
+    const isEleven = state.ttsEngine === 'elevenlabs';
+    const voiceList = isEleven ? ELEVENLABS_VOICES : GEMINI_VOICES;
+    const femaleVoices = voiceList.filter(v => v.gender === 'female');
+    const maleVoices = voiceList.filter(v => v.gender === 'male');
 
     return `
       <optgroup label="🌸 Female Voices">
@@ -1150,19 +1187,22 @@ Maya: Perfect, there we go. Thank you so much!`,
         else if (activeGender === 'male') newGender = 'female';
         else newGender = 'female';
 
+        const isEleven = state.ttsEngine === 'elevenlabs';
         speakerGenderOverrides[s.name] = newGender;
         if (newGender === 'female') {
-          speakerVoiceOverrides[s.name] = 'Aoede';
+          speakerVoiceOverrides[s.name] = isEleven ? '21m00Tcm4TlvDq8ikWAM' : 'Aoede';
         } else {
-          speakerVoiceOverrides[s.name] = 'Puck';
+          speakerVoiceOverrides[s.name] = isEleven ? 'pNInz6obpgDQGcFmaJgB' : 'Puck';
         }
         renderSmartSpeakerConfig();
       });
 
       const select = card.querySelector('.speaker-voice-select');
       select.addEventListener('change', (e) => {
+        const isEleven = state.ttsEngine === 'elevenlabs';
         speakerVoiceOverrides[s.name] = e.target.value;
-        const vObj = GEMINI_VOICES.find(v => v.id === e.target.value);
+        const voiceList = isEleven ? ELEVENLABS_VOICES : GEMINI_VOICES;
+        const vObj = voiceList.find(v => v.id === e.target.value);
         if (vObj) {
           speakerGenderOverrides[s.name] = vObj.gender;
         }
@@ -1458,6 +1498,71 @@ Maya: Perfect, there we go. Thank you so much!`,
     };
   }
 
+  // --- ELEVENLABS TTS SYNTHESIS ENGINE ---
+  async function callElevenLabsTts(turns) {
+    const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
+
+    function getSpeakerVoice(spkName, fallbackIndex) {
+      if (speakerVoiceOverrides[spkName]) return speakerVoiceOverrides[spkName];
+      const select = document.querySelector(`.speaker-voice-select[data-speaker="${spkName}"]`);
+      if (select && select.value) return select.value;
+      const defaultVoices = ['pNInz6obpgDQGcFmaJgB', '21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL', 'ErXwobaYiN019PkySvjV'];
+      return defaultVoices[fallbackIndex % defaultVoices.length];
+    }
+
+    async function requestSingleElevenAudio(text, voiceId) {
+      const res = await fetch('/api/elevenlabs/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voiceId,
+          apiKey: state.elevenApiKey || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `ElevenLabs HTTP ${res.status}`);
+      }
+      return data.audioBase64;
+    }
+
+    if (uniqueSpeakers.length === 1) {
+      const fullText = turns.map(t => t.text).join('\n\n');
+      const voiceId = getSpeakerVoice(uniqueSpeakers[0], 0);
+      setGenerationStatus(`Synthesizing with ElevenLabs voice...`);
+      const b64 = await requestSingleElevenAudio(fullText, voiceId);
+      const bytes = base64ToUint8Array(b64);
+      const blob = new Blob([bytes], { type: 'audio/mpeg' });
+      return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+    }
+
+    const audioBuffers = [];
+    for (let i = 0; i < turns.length; i++) {
+      const turn = turns[i];
+      const spkIdx = uniqueSpeakers.indexOf(turn.speaker);
+      const voiceId = getSpeakerVoice(turn.speaker, spkIdx >= 0 ? spkIdx : i);
+
+      setGenerating(true, `Synthesizing ${turn.speaker} (${i + 1}/${turns.length}) with ElevenLabs...`);
+      const b64 = await requestSingleElevenAudio(turn.text, voiceId);
+      audioBuffers.push(base64ToUint8Array(b64));
+    }
+
+    const combinedBlob = new Blob(audioBuffers, { type: 'audio/mpeg' });
+    const reader = new FileReader();
+    const finalBase64 = await new Promise((resolve) => {
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(combinedBlob);
+    });
+
+    return {
+      blob: combinedBlob,
+      objectUrl: URL.createObjectURL(combinedBlob),
+      base64: finalBase64
+    };
+  }
+
   // --- MULTIMODAL: PHOTO TO DIALOGUE + ANSWER KEY ---
   async function generateFromPhotoWithAI(imageFile) {
     if (!state.apiKey && !state.hasServerKey) {
@@ -1681,16 +1786,29 @@ Return strictly valid JSON:
       return;
     }
 
-    if (!state.apiKey && !state.hasServerKey) {
-      const useSample = confirm('No Gemini API Key found. Would you like to load the bundled sample listening track (Leo & Maya dialogue) now, or enter your API key?');
-      if (useSample) {
-        closeModal();
-        loadAudioTrack('sample.wav', true);
+    const isEleven = state.ttsEngine === 'elevenlabs';
+
+    if (isEleven) {
+      if (!state.elevenApiKey) {
+        alert('Please enter your ElevenLabs API Key in the Settings section below.');
+        const acc = document.querySelector('.settings-accordion');
+        if (acc) acc.open = true;
+        if (elevenApiKeyInput) elevenApiKeyInput.focus();
         return;
       }
-      document.querySelector('.settings-accordion').open = true;
-      apiKeyInput.focus();
-      return;
+    } else {
+      if (!state.apiKey && !state.hasServerKey) {
+        const useSample = confirm('No Gemini API Key found. Would you like to load the bundled sample listening track (Leo & Maya dialogue) now, or enter your API key?');
+        if (useSample) {
+          closeModal();
+          loadAudioTrack('sample.wav', true);
+          return;
+        }
+        const acc = document.querySelector('.settings-accordion');
+        if (acc) acc.open = true;
+        if (apiKeyInput) apiKeyInput.focus();
+        return;
+      }
     }
 
     // Use advanced parser
@@ -1701,22 +1819,28 @@ Return strictly valid JSON:
       return;
     }
 
-    setGenerating(true, 'Synthesizing audio with Gemini 3.8 TTS...');
-    setGenerationStatus('Connecting to Gemini 3.8 TTS API...');
+    setGenerating(true, isEleven ? 'Synthesizing with ElevenLabs AI...' : 'Synthesizing audio with Gemini 3.8 TTS...');
+    setGenerationStatus(isEleven ? 'Connecting to ElevenLabs API...' : 'Connecting to Gemini 3.8 TTS API...');
 
     try {
+      let audioResult;
       const styleDirection = deliveryStyleInput.value.trim() || 'Clear enunciation for ESL learners';
-      const audioResult = await callGeminiTts(turns, styleDirection);
+      if (isEleven) {
+        audioResult = await callElevenLabsTts(turns);
+      } else {
+        audioResult = await callGeminiTts(turns, styleDirection);
+      }
 
       const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
       let trackTitle = '';
       let trackSubtitle = '';
+      const engineLabel = isEleven ? 'ElevenLabs AI' : 'Gemini TTS';
       if (uniqueSpeakers.length > 1) {
         trackTitle = `${uniqueSpeakers.join(' & ')}: Listening Task`;
-        trackSubtitle = `${uniqueSpeakers.length} Speakers • Cambridge ESL`;
+        trackSubtitle = `${uniqueSpeakers.length} Speakers • ${engineLabel}`;
       } else {
         trackTitle = `${uniqueSpeakers[0] || 'Narration'}: Listening Audio`;
-        trackSubtitle = `Voice Narration • ${styleDirection}`;
+        trackSubtitle = `Voice Narration • ${engineLabel}`;
       }
 
       state.audioBlob = audioResult.blob;
@@ -1762,6 +1886,16 @@ Return strictly valid JSON:
     // Navigation
     themeToggleBtn.addEventListener('click', toggleTheme);
     savedTracksBtn.addEventListener('click', openLibrary);
+    if (openSettingsBtn) {
+      openSettingsBtn.addEventListener('click', () => {
+        openModal();
+        const acc = document.querySelector('.settings-accordion');
+        if (acc) {
+          acc.open = true;
+          acc.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    }
     closeLibraryBtn.addEventListener('click', closeLibrary);
     refreshLibraryBtn.addEventListener('click', loadLibraryTracks);
     openDrawerBtn.addEventListener('click', openModal);
@@ -1851,11 +1985,28 @@ Return strictly valid JSON:
       chip.addEventListener('click', () => loadPreset(chip.dataset.preset));
     });
 
-    // API Key Save
-    saveKeyBtn.addEventListener('click', saveApiKey);
-    apiKeyInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') saveApiKey();
-    });
+    // API Key & Engine Saves
+    if (saveKeyBtn) saveKeyBtn.addEventListener('click', saveApiKey);
+    if (apiKeyInput) {
+      apiKeyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveApiKey();
+      });
+    }
+
+    if (saveElevenKeyBtn) saveElevenKeyBtn.addEventListener('click', saveElevenApiKey);
+    if (elevenApiKeyInput) {
+      elevenApiKeyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveElevenApiKey();
+      });
+    }
+
+    if (ttsEngineSelect) {
+      ttsEngineSelect.addEventListener('change', () => {
+        state.ttsEngine = ttsEngineSelect.value;
+        localStorage.setItem('listening_tts_engine', state.ttsEngine);
+        renderSmartSpeakerConfig();
+      });
+    }
 
     // Smart Script Input Listeners
     scriptTextInput.addEventListener('input', () => {
