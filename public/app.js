@@ -1109,6 +1109,17 @@ Maya: Perfect, there we go. Thank you so much!`,
 
   function renderSmartSpeakerConfig() {
     if (!speakersGrid || !scriptTextInput) return;
+    const isEleven = state.ttsEngine === 'elevenlabs';
+    const validVoices = isEleven ? ELEVENLABS_VOICES : GEMINI_VOICES;
+    const validIds = new Set(validVoices.map(v => v.id));
+
+    // Prune voice overrides from other engines
+    for (const [name, voiceId] of Object.entries(speakerVoiceOverrides)) {
+      if (!validIds.has(voiceId)) {
+        delete speakerVoiceOverrides[name];
+      }
+    }
+
     const text = scriptTextInput.value;
     const analysis = analyzeScriptContext(text);
 
@@ -1124,10 +1135,13 @@ Maya: Perfect, there we go. Thank you so much!`,
       speakerCountBadge.textContent = `${analysis.speakers.length} ${analysis.speakers.length === 1 ? 'Voice' : 'Voices'} Assigned`;
 
       smartSpeakersQuickList.innerHTML = analysis.speakers.map(s => {
-        const activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+        let activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+        if (!validIds.has(activeVoice)) activeVoice = s.voice;
         const activeGender = speakerGenderOverrides[s.name] || s.gender;
         const icon = activeGender === 'female' ? '♀' : activeGender === 'male' ? '♂' : '📖';
-        return `<span class="smart-quick-pill gender-${activeGender}">${icon} ${s.name}: ${activeVoice}</span>`;
+        const vObj = validVoices.find(v => v.id === activeVoice);
+        const displayName = vObj ? vObj.name.split(' ')[0] : activeVoice;
+        return `<span class="smart-quick-pill gender-${activeGender}">${icon} ${s.name}: ${displayName}</span>`;
       }).join('');
     }
 
@@ -1138,6 +1152,7 @@ Maya: Perfect, there we go. Thank you so much!`,
     speakersGrid.innerHTML = '';
 
     if (analysis.speakers.length === 0) {
+      const defaultVoice = isEleven ? 'pNInz6obpgDQGcFmaJgB' : 'Puck';
       speakersGrid.innerHTML = `
         <div class="speaker-card">
           <div class="speaker-card-header">
@@ -1146,7 +1161,7 @@ Maya: Perfect, there we go. Thank you so much!`,
           </div>
           <div class="select-wrapper">
             <select class="form-select speaker-voice-select" data-speaker="Speaker 1">
-              ${renderVoiceOptions('Puck')}
+              ${renderVoiceOptions(defaultVoice)}
             </select>
           </div>
         </div>
@@ -1155,7 +1170,8 @@ Maya: Perfect, there we go. Thank you so much!`,
     }
 
     analysis.speakers.forEach(s => {
-      const activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+      let activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+      if (!validIds.has(activeVoice)) activeVoice = s.voice;
       const activeGender = speakerGenderOverrides[s.name] || s.gender;
       const genderIcon = activeGender === 'female' ? '♀ Female' : activeGender === 'male' ? '♂ Male' : '📖 Narrator';
       const cardTitle = s.name === 'Narrator' ? '📖 Literature Narrator' : s.name;
@@ -1498,15 +1514,123 @@ Maya: Perfect, there we go. Thank you so much!`,
     };
   }
 
+  // --- WEB AUDIO API DECODING & WAV ENCODING FOR MULTI-SPEAKER ELEVENLABS ---
+  function getAudioContext() {
+    if (!audioCtx) {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+      } catch (e) {
+        console.warn('AudioContext creation failed:', e);
+      }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  async function decodeAudioBytesToBuffer(uint8Bytes) {
+    const ctx = getAudioContext();
+    const copy = uint8Bytes.buffer.slice(uint8Bytes.byteOffset, uint8Bytes.byteOffset + uint8Bytes.byteLength);
+    return await ctx.decodeAudioData(copy);
+  }
+
+  function mergeAudioBuffers(bufferList, pauseSeconds = 1.0) {
+    const ctx = getAudioContext();
+    const sampleRate = bufferList[0].sampleRate;
+    const numChannels = 1;
+
+    const pauseSamples = Math.floor(sampleRate * pauseSeconds);
+    let totalSamples = 0;
+    for (let i = 0; i < bufferList.length; i++) {
+      totalSamples += bufferList[i].length;
+      if (i < bufferList.length - 1) {
+        totalSamples += pauseSamples;
+      }
+    }
+
+    const merged = ctx.createBuffer(numChannels, totalSamples, sampleRate);
+    const outData = merged.getChannelData(0);
+
+    let offset = 0;
+    for (let i = 0; i < bufferList.length; i++) {
+      const b = bufferList[i];
+      if (b.numberOfChannels === 1) {
+        outData.set(b.getChannelData(0), offset);
+      } else {
+        const left = b.getChannelData(0);
+        const right = b.getChannelData(1);
+        for (let s = 0; s < b.length; s++) {
+          outData[offset + s] = (left[s] + right[s]) * 0.5;
+        }
+      }
+      offset += b.length;
+      if (i < bufferList.length - 1) {
+        offset += pauseSamples;
+      }
+    }
+
+    return merged;
+  }
+
+  function audioBufferToWavUint8Array(audioBuffer) {
+    const numChannels = 1;
+    const sampleRate = audioBuffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const data = audioBuffer.getChannelData(0);
+    const dataLength = data.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+
+    function writeString(offset, string) {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    }
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < data.length; i++) {
+      let sample = Math.max(-1, Math.min(1, data[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+
+    return new Uint8Array(buffer);
+  }
+
   // --- ELEVENLABS TTS SYNTHESIS ENGINE ---
   async function callElevenLabsTts(turns) {
     const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
+    const validVoices = ELEVENLABS_VOICES;
+    const validIds = new Set(validVoices.map(v => v.id));
 
     function getSpeakerVoice(spkName, fallbackIndex) {
-      if (speakerVoiceOverrides[spkName]) return speakerVoiceOverrides[spkName];
+      if (speakerVoiceOverrides[spkName] && validIds.has(speakerVoiceOverrides[spkName])) {
+        return speakerVoiceOverrides[spkName];
+      }
       const select = document.querySelector(`.speaker-voice-select[data-speaker="${spkName}"]`);
-      if (select && select.value) return select.value;
-      const defaultVoices = ['pNInz6obpgDQGcFmaJgB', '21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL', 'ErXwobaYiN019PkySvjV'];
+      if (select && select.value && validIds.has(select.value)) {
+        return select.value;
+      }
+      const defaultVoices = ['21m00Tcm4TlvDq8ikWAM', 'pNInz6obpgDQGcFmaJgB', 'EXAVITQu4vr4xnSDxMaL', 'ErXwobaYiN019PkySvjV'];
       return defaultVoices[fallbackIndex % defaultVoices.length];
     }
 
@@ -1531,34 +1655,49 @@ Maya: Perfect, there we go. Thank you so much!`,
     if (uniqueSpeakers.length === 1) {
       const fullText = turns.map(t => t.text).join('\n\n');
       const voiceId = getSpeakerVoice(uniqueSpeakers[0], 0);
-      setGenerationStatus(`Synthesizing with ElevenLabs voice...`);
+      setGenerationStatus(`Synthesizing single speaker with ElevenLabs...`);
       const b64 = await requestSingleElevenAudio(fullText, voiceId);
-      const bytes = base64ToUint8Array(b64);
-      const blob = new Blob([bytes], { type: 'audio/mpeg' });
-      return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+      const rawBytes = base64ToUint8Array(b64);
+      try {
+        const decoded = await decodeAudioBytesToBuffer(rawBytes);
+        const wavBytes = audioBufferToWavUint8Array(decoded);
+        const finalBase64 = uint8ArrayToBase64(wavBytes);
+        const blob = new Blob([wavBytes], { type: 'audio/wav' });
+        return { blob, objectUrl: URL.createObjectURL(blob), base64: finalBase64 };
+      } catch (e) {
+        const blob = new Blob([rawBytes], { type: 'audio/mpeg' });
+        return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
+      }
     }
 
-    const audioBuffers = [];
+    // MULTI-SPEAKER DIALOGUE WITH ELEVENLABS
+    setGenerationStatus(`Synthesizing ${uniqueSpeakers.length} ElevenLabs speakers...`);
+    const decodedBuffers = [];
     for (let i = 0; i < turns.length; i++) {
       const turn = turns[i];
       const spkIdx = uniqueSpeakers.indexOf(turn.speaker);
       const voiceId = getSpeakerVoice(turn.speaker, spkIdx >= 0 ? spkIdx : i);
+      const voiceObj = ELEVENLABS_VOICES.find(v => v.id === voiceId);
+      const voiceName = voiceObj ? voiceObj.name.split(' ')[0] : 'Voice';
 
-      setGenerating(true, `Synthesizing ${turn.speaker} (${i + 1}/${turns.length}) with ElevenLabs...`);
+      setGenerating(true, `Synthesizing ${turn.speaker} (${i + 1}/${turns.length}) with ${voiceName}...`);
+      setGenerationStatus(`ElevenLabs: generating ${turn.speaker}'s line...`);
+
       const b64 = await requestSingleElevenAudio(turn.text, voiceId);
-      audioBuffers.push(base64ToUint8Array(b64));
+      const rawBytes = base64ToUint8Array(b64);
+      const audioBuf = await decodeAudioBytesToBuffer(rawBytes);
+      decodedBuffers.push(audioBuf);
     }
 
-    const combinedBlob = new Blob(audioBuffers, { type: 'audio/mpeg' });
-    const reader = new FileReader();
-    const finalBase64 = await new Promise((resolve) => {
-      reader.onloadend = () => resolve(reader.result.split(',')[1]);
-      reader.readAsDataURL(combinedBlob);
-    });
+    setGenerating(true, 'Stitching multi-speaker ElevenLabs dialogue with pauses...');
+    const mergedBuffer = mergeAudioBuffers(decodedBuffers, 1.1);
+    const wavBytes = audioBufferToWavUint8Array(mergedBuffer);
+    const finalBase64 = uint8ArrayToBase64(wavBytes);
+    const blob = new Blob([wavBytes], { type: 'audio/wav' });
 
     return {
-      blob: combinedBlob,
-      objectUrl: URL.createObjectURL(combinedBlob),
+      blob,
+      objectUrl: URL.createObjectURL(blob),
       base64: finalBase64
     };
   }
