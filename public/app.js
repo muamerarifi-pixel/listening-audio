@@ -1288,11 +1288,16 @@ Maya: Perfect, there we go. Thank you so much!`,
           return requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel, 'gemini-3.1-flash-tts-preview');
         }
 
-        // 2. If per-minute rate limit hit (e.g. 3 req/min on Free Tier), pause and retry
+        // 2. If daily quota exhausted on Google AI Studio Free Tier, abort immediately (countdown won't fix daily quota)
+        if (res.status === 429 && (errMsg.includes('per day') || errMsg.includes('daily'))) {
+          throw new Error(`Google AI Studio Daily Limit Reached (10 requests/day on unbilled API keys).\n\nTo lift this limit: In aistudio.google.com, link a Google Cloud Billing account (Pay-as-you-go) to your API project.`);
+        }
+
+        // 3. If short-term per-minute rate limit hit, pause and retry
         if (res.status === 429 && attempt < 3) {
           console.warn('Per-minute rate limit encountered, waiting for window reset...');
           for (let sec = 20; sec > 0; sec--) {
-            setGenerationStatus(`Free-tier rate limit reached. Pausing ${sec}s before next speaker...`);
+            setGenerationStatus(`Temporary API rate limit reached. Retrying in ${sec}s...`);
             await new Promise(r => setTimeout(r, 1000));
           }
           continue;
