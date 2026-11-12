@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Listening">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z'/></svg>">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 
@@ -217,61 +217,39 @@
       </div>
 
       <!-- SCRIPT / DIALOGUE INPUT -->
+      <!-- SMART SCRIPT & DIALOGUE INPUT -->
       <div class="form-group" style="margin-top: 1rem;">
         <div class="form-label-row">
           <label for="scriptTextInput">Dialogue / Text to Speak</label>
-          <span class="hint-text">Format: "Speaker 1: Text" or "**Speaker 1**"</span>
+          <div id="smartDetectionBadge" class="smart-detection-badge">
+            <span class="smart-icon">✨</span>
+            <span id="smartDetectionText">Smart Detection: Ready</span>
+          </div>
         </div>
-        <textarea id="scriptTextInput" class="form-textarea" rows="8" placeholder="Speaker 1: Good morning! Welcome in.
-Speaker 2: Hello! I'd like to practice listening today.
-Speaker 3: Me too! The audio sounds crystal clear."></textarea>
+        <textarea id="scriptTextInput" class="form-textarea" rows="8" placeholder="Paste your text here...
+• Literature or story passage (single narration)
+• 2-person dialogue (e.g. Leo &amp; Maya)
+• 3 or 4-person exam listening (e.g. Speaker 1, 2, 3, 4)"></textarea>
+
+        <!-- Live Intelligence Context Bar -->
+        <div id="smartContextBar" class="smart-context-bar hidden">
+          <div class="smart-context-info">
+            <span id="smartModePill" class="smart-pill mode-pill">📖 Literature</span>
+            <span id="smartStatsPill" class="smart-pill stats-pill">1 Speaker • 0 words</span>
+          </div>
+          <div id="smartSpeakersQuickList" class="smart-speakers-quick-list"></div>
+        </div>
       </div>
 
-      <!-- SPEAKER & VOICE MAPPINGS -->
+      <!-- DYNAMIC SPEAKER & VOICE CAST -->
       <div class="form-section">
-        <div class="section-title-sm">Voice Configuration &amp; Style</div>
+        <div class="section-title-row">
+          <div class="section-title-sm">Voice Configuration &amp; Style</div>
+          <span id="speakerCountBadge" class="badge-count">Auto-Configured</span>
+        </div>
         
-        <div class="speakers-grid">
-          
-          <div class="speaker-card">
-            <span class="speaker-tag speaker-1">Speaker 1 (Default / Leo)</span>
-            <div class="select-wrapper">
-              <select id="voice1Select" class="form-select">
-                <option value="Puck" selected>Puck (Warm, friendly male)</option>
-                <option value="Fenrir">Fenrir (Deep, calm male)</option>
-                <option value="Zephyr">Zephyr (Gentle, soft male)</option>
-                <option value="Aoede">Aoede (Breezy, warm female)</option>
-                <option value="Kore">Kore (Clear, gentle female)</option>
-                <option value="Charon">Charon (Authoritative narrator)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="speaker-card">
-            <span class="speaker-tag speaker-2">Speaker 2 (Maya / Partner)</span>
-            <div class="select-wrapper">
-              <select id="voice2Select" class="form-select">
-                <option value="Aoede" selected>Aoede (Breezy, warm female)</option>
-                <option value="Kore">Kore (Clear, gentle female)</option>
-                <option value="Puck">Puck (Warm, friendly male)</option>
-                <option value="Fenrir">Fenrir (Deep, calm male)</option>
-                <option value="Zephyr">Zephyr (Gentle male)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="speaker-card">
-            <span class="speaker-tag speaker-3">Speaker 3 (Emma / Guest)</span>
-            <div class="select-wrapper">
-              <select id="voice3Select" class="form-select">
-                <option value="Kore" selected>Kore (Gentle, expressive female)</option>
-                <option value="Aoede">Aoede (Breezy female)</option>
-                <option value="Puck">Puck (Friendly male)</option>
-                <option value="Zephyr">Zephyr (Gentle male)</option>
-              </select>
-            </div>
-          </div>
-
+        <div id="speakersGrid" class="speakers-grid">
+          <!-- Dynamically populated by Smart Analysis Engine -->
         </div>
 
         <div class="style-row">
@@ -330,7 +308,7 @@ Speaker 3: Me too! The audio sounds crystal clear."></textarea>
   <!-- Audio Element (Hidden Core) -->
   <audio id="coreAudioPlayer" preload="auto"></audio>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {

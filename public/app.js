@@ -132,9 +132,19 @@ Maya: Perfect, there we go. Thank you so much!`,
   // Dialogue Script & Voice Configuration Elements
   const scriptTextInput = document.getElementById('scriptTextInput');
   
-  const voice1Select = document.getElementById('voice1Select');
-  const voice2Select = document.getElementById('voice2Select');
-  const voice3Select = document.getElementById('voice3Select');
+  const speakersGrid = document.getElementById('speakersGrid');
+  const smartDetectionBadge = document.getElementById('smartDetectionBadge');
+  const smartDetectionText = document.getElementById('smartDetectionText');
+  const smartContextBar = document.getElementById('smartContextBar');
+  const smartModePill = document.getElementById('smartModePill');
+  const smartStatsPill = document.getElementById('smartStatsPill');
+  const smartSpeakersQuickList = document.getElementById('smartSpeakersQuickList');
+  const speakerCountBadge = document.getElementById('speakerCountBadge');
+
+  const speakerVoiceOverrides = {};
+  const speakerGenderOverrides = {};
+  let userHasCustomizedStyle = false;
+
   const deliveryStyleInput = document.getElementById('deliveryStyleInput');
   const saveToCloudflareCheckbox = document.getElementById('saveToCloudflareCheckbox');
   const apiKeyInput = document.getElementById('apiKeyInput');
@@ -169,6 +179,7 @@ Maya: Perfect, there we go. Thank you so much!`,
     loadAudioTrack(state.audioUrl, false);
     initWaveformCanvas();
     checkKvBackend();
+    renderSmartSpeakerConfig();
   }
 
   // --- THEME ---
@@ -593,6 +604,7 @@ Maya: Perfect, there we go. Thank you so much!`,
 
     scriptTextInput.value = p.script;
     deliveryStyleInput.value = p.style;
+    renderSmartSpeakerConfig();
     setGenerationStatus(`Loaded "${p.title}" preset.`);
   }
 
@@ -600,6 +612,7 @@ Maya: Perfect, there we go. Thank you so much!`,
   function openModal() {
     creatorModal.classList.remove('hidden');
     apiKeyInput.value = state.apiKey;
+    renderSmartSpeakerConfig();
   }
 
   function closeModal() {
@@ -781,19 +794,395 @@ Maya: Perfect, there we go. Thank you so much!`,
     return bytes;
   }
 
+  // --- SMART CONTEXT & GENDER INTELLIGENCE ENGINE ---
+  const FEMALE_NAMES = new Set([
+    'mia', 'maya', 'emma', 'olivia', 'sophia', 'ava', 'isabella', 'amelia', 'charlotte', 'harper',
+    'evelyn', 'abigail', 'emily', 'elizabeth', 'mila', 'ella', 'avery', 'sofia', 'camila', 'aria',
+    'scarlett', 'victoria', 'madison', 'luna', 'grace', 'chloe', 'penelope', 'layla', 'riley', 'zoey',
+    'nora', 'lily', 'eleanor', 'hannah', 'lillian', 'addison', 'aubrey', 'ellie', 'stella', 'natalie',
+    'zoe', 'leah', 'hazel', 'violet', 'aurora', 'savannah', 'audrey', 'brooklyn', 'bella', 'claire',
+    'skylar', 'lucy', 'paisley', 'everly', 'anna', 'caroline', 'nova', 'genesis', 'emilia', 'kennedy',
+    'samantha', 'sarah', 'alice', 'mary', 'jennifer', 'linda', 'patricia', 'barbara', 'susan', 'jessica',
+    'karen', 'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'donna', 'michelle',
+    'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'cynthia',
+    'kathleen', 'amy', 'shirley', 'angela', 'helen', 'brenda', 'pamela', 'nicole', 'katherine',
+    'christine', 'rachel', 'catherine', 'carolyn', 'janet', 'ruth', 'maria', 'heather', 'diane',
+    'virginia', 'julie', 'joyce', 'kelly', 'christina', 'lauren', 'joan', 'judith', 'megan', 'cheryl',
+    'andrea', 'martha', 'jacqueline', 'frances', 'gloria', 'ann', 'teresa', 'kathryn', 'sara', 'janice',
+    'jean', 'doris', 'julia', 'judy', 'denise', 'amber', 'marilyn', 'beverly', 'danielle', 'theresa',
+    'marie', 'diana', 'brittany', 'rose', 'alexis', 'kaylee', 'clara', 'daisy', 'lucia', 'fiona',
+    'woman', 'girl', 'mother', 'mom', 'mum', 'sister', 'daughter', 'aunt', 'grandma', 'grandmother',
+    'wife', 'mrs', 'ms', 'miss', 'lady', 'queen', 'princess', 'actress', 'hostess', 'madam'
+  ]);
+
+  const MALE_NAMES = new Set([
+    'leo', 'liam', 'noah', 'oliver', 'elijah', 'james', 'william', 'benjamin', 'lucas', 'henry',
+    'theodore', 'jack', 'levi', 'alexander', 'jackson', 'mateo', 'daniel', 'michael', 'mason',
+    'sebastian', 'ethan', 'logan', 'owen', 'samuel', 'jacob', 'asher', 'aiden', 'john', 'joseph',
+    'wyatt', 'david', 'matthew', 'luke', 'julian', 'hudson', 'grayson', 'jayden', 'gabriel', 'isaac',
+    'lincoln', 'anthony', 'dylan', 'carter', 'thomas', 'charles', 'christopher', 'jaxon', 'maverick',
+    'josiah', 'isaiah', 'andrew', 'elias', 'joshua', 'nathan', 'caleb', 'ryan', 'adrian', 'miles',
+    'eli', 'nolan', 'christian', 'aaron', 'cameron', 'ezekiel', 'colton', 'luca', 'landon', 'hunter',
+    'jonathan', 'santiago', 'axel', 'easton', 'cooper', 'jeremiah', 'angel', 'roman', 'connor',
+    'jameson', 'robert', 'greyson', 'jordan', 'ian', 'carson', 'jaxson', 'leonardo', 'nicholas',
+    'dominic', 'austin', 'adam', 'xavier', 'jose', 'jace', 'george', 'arthur', 'paul', 'mark',
+    'edward', 'brian', 'kevin', 'ronald', 'timothy', 'jason', 'jeffrey', 'frank', 'gary', 'stephen',
+    'eric', 'larry', 'justin', 'scott', 'brandon', 'raymond', 'gregory', 'patrick', 'sean', 'peter',
+    'walter', 'kyle', 'harold', 'douglas', 'jerry', 'carl', 'roger', 'joe', 'juan', 'albert',
+    'terry', 'gerald', 'keith', 'ralph', 'lawrence', 'roy', 'bruce', 'harry', 'fred', 'wayne',
+    'billy', 'steve', 'louis', 'jeremy', 'randy', 'howard', 'eugene', 'carlos', 'russell', 'bobby',
+    'victor', 'martin', 'ernest', 'phillip', 'todd', 'jesse', 'craig', 'alan', 'shawn', 'clarence',
+    'philip', 'chris', 'johnny', 'earl', 'jimmy', 'antonio', 'danny', 'bryan', 'tony', 'luis',
+    'mike', 'stanley', 'leonard', 'dale', 'manuel', 'rodney', 'curtis', 'norman', 'allen', 'marvin',
+    'vincent', 'glenn', 'travis', 'jeff', 'chad', 'lee', 'melvin', 'alfred', 'francis', 'bradley',
+    'herbert', 'frederick', 'ray', 'joel', 'edwin', 'don', 'eddie', 'ricky', 'troy', 'randall',
+    'barry', 'bernard', 'mario', 'leroy', 'francisco', 'marcus', 'clifford', 'miguel', 'oscar',
+    'jay', 'jim', 'tom', 'calvin', 'alex', 'jon', 'ronnie', 'bill', 'lloyd', 'tommy', 'leon',
+    'derek', 'warren', 'darrell', 'jerome', 'floyd', 'alvin', 'tim', 'wesley', 'gordon', 'dean',
+    'greg', 'jorge', 'dustin', 'pedro', 'derrick', 'dan', 'lewis', 'zachary', 'corey', 'herman',
+    'maurice', 'vernon', 'roberto', 'clyde', 'glen', 'hector', 'shane', 'ricardo', 'sam', 'rick',
+    'lester', 'brent', 'ramon', 'charlie', 'tyler', 'gilbert', 'gene', 'marc', 'reginald', 'ruben',
+    'brett', 'nathaniel', 'rafael', 'leslie', 'edgar', 'milton', 'raul', 'ben', 'chester', 'cecil',
+    'duane', 'franklin', 'andre', 'elmer', 'brad', 'ron', 'mitchell', 'roland', 'arnold', 'harvey',
+    'jared', 'karl', 'cory', 'claude', 'erik', 'darryl', 'jamie', 'neil', 'jessie', 'ted',
+    'mathew', 'tyrone', 'darren', 'lonnie', 'lance', 'cody', 'julio', 'kurt', 'allan', 'nelson',
+    'guy', 'clayton', 'hugh', 'max', 'dwayne', 'dwight', 'armando', 'felix', 'jimmie', 'everett',
+    'wallace', 'ken', 'bob', 'jaime', 'casey', 'alfredo', 'alberto', 'dave', 'ivan', 'johnnie',
+    'sid', 'matt', 'timmy', 'donny', 'zach', 'simon', 'toby',
+    'man', 'boy', 'father', 'dad', 'brother', 'son', 'uncle', 'grandpa', 'grandfather',
+    'husband', 'mr', 'sir', 'king', 'prince', 'actor', 'host', 'gentleman'
+  ]);
+
+  const GEMINI_VOICES = [
+    { id: 'Aoede', name: 'Aoede (Warm, breezy female)', gender: 'female' },
+    { id: 'Kore', name: 'Kore (Clear, gentle female)', gender: 'female' },
+    { id: 'Puck', name: 'Puck (Warm, natural male)', gender: 'male' },
+    { id: 'Fenrir', name: 'Fenrir (Deep, calm male)', gender: 'male' },
+    { id: 'Charon', name: 'Charon (Narrative storyteller male)', gender: 'male' },
+    { id: 'Zephyr', name: 'Zephyr (Soft, gentle male)', gender: 'male' }
+  ];
+
+  function detectGender(speakerName, sampleText = '') {
+    const cleanName = speakerName.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
+    const tokens = cleanName.split(/\s+/);
+
+    for (const t of tokens) {
+      if (FEMALE_NAMES.has(t)) return 'female';
+      if (MALE_NAMES.has(t)) return 'male';
+    }
+
+    if (/^(mrs|ms|miss)\b/i.test(cleanName)) return 'female';
+    if (/^mr\b/i.test(cleanName)) return 'male';
+
+    const lowerText = sampleText.toLowerCase();
+    const femaleClues = /\b(my husband|as a girl|as a woman|pregnant|actress|headmistress|waitress|heroine|she told me|aunt|sister)\b/i;
+    const maleClues = /\b(my wife|as a boy|as a man|actor|headmaster|waiter|hero|uncle|brother)\b/i;
+
+    const femaleMatches = (lowerText.match(femaleClues) || []).length;
+    const maleMatches = (lowerText.match(maleClues) || []).length;
+
+    if (femaleMatches > maleMatches) return 'female';
+    if (maleMatches > femaleMatches) return 'male';
+
+    return 'neutral';
+  }
+
+  function parseSpeakerLine(line) {
+    const clean = line.trim();
+    if (!clean || clean === '---' || clean === '***' || clean === '___') return null;
+
+    // Pattern A: Explicit colon: "Emma: text...", "**David**: text", "Speaker 1: text"
+    const colonMatch = clean.match(/^(?:[*#\-_\[\s]{0,3})([A-Z][a-zA-Z0-9_\s.]{1,24}?)(?:[*#\-_\]\s]{0,3}):\s*(.*)$/);
+    if (colonMatch) {
+      const spk = colonMatch[1].replace(/[*_#\[\]]/g, '').trim();
+      if (!/^(note|exercise|unit|lesson|page|q\d*|question|answer|tip|warning)\b/i.test(spk)) {
+        return { speaker: spk, inlineText: colonMatch[2].trim() };
+      }
+    }
+
+    // Pattern B: Standalone speaker header without colon: "Speaker 1", "**Speaker 2**", "[Speaker 3]", "Narrator"
+    if (!/[.,!?;]$/.test(clean)) {
+      const keywordMatch = clean.match(/^(?:[*#\-_\[\s]{0,3})\s*(Speaker\s*\d+|Person\s*[A-Z\d]|Narrator|Interviewer|Interviewee|Student\s*\d+|Man|Woman|Boy|Girl)\s*(?:[*#\-_\]\s]{0,3})$/i);
+      if (keywordMatch) {
+        return { speaker: keywordMatch[1].replace(/[*_#\[\]]/g, '').trim(), inlineText: '' };
+      }
+
+      const boldMatch = clean.match(/^(?:\*\*|\[|__)\s*([A-Z][a-zA-Z0-9_\s]{1,20})\s*(?:\*\*|\]|__)$/);
+      if (boldMatch) {
+        return { speaker: boldMatch[1].trim(), inlineText: '' };
+      }
+    }
+
+    return null;
+  }
+
+  function analyzeScriptContext(rawText) {
+    if (!rawText || !rawText.trim()) {
+      return {
+        mode: 'empty',
+        modeLabel: 'Ready for text',
+        speakers: [],
+        turns: [],
+        recommendedStyle: 'Clear, natural enunciation with measured pauses',
+        stats: { totalWords: 0, totalTurns: 0, uniqueSpeakers: 0 }
+      };
+    }
+
+    let dialogueText = rawText;
+    const akMatch = rawText.match(/(?:^|\n)\s*(?:[-*_]{3,}\s*)?(?:Answer\s*Key|Answers|Teacher'?s?\s*Key|Questions)[\s\S]*$/i);
+    if (akMatch && akMatch.index > 50) {
+      dialogueText = rawText.substring(0, akMatch.index).trim();
+    }
+
+    const lines = dialogueText.split('\n');
+    const turns = [];
+    let currentSpeaker = null;
+    let currentParagraphs = [];
+
+    function commitTurn() {
+      if (currentParagraphs.length > 0 && currentSpeaker) {
+        const cleanText = currentParagraphs.join(' ').replace(/[*_#]/g, '').trim();
+        if (cleanText) {
+          turns.push({ speaker: currentSpeaker, text: cleanText });
+        }
+        currentParagraphs = [];
+      }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line === '---' || line === '***' || line === '___') continue;
+
+      const parsed = parseSpeakerLine(line);
+      if (parsed) {
+        commitTurn();
+        currentSpeaker = parsed.speaker;
+        if (parsed.inlineText) {
+          currentParagraphs.push(parsed.inlineText);
+        }
+      } else {
+        if (!currentSpeaker) {
+          currentSpeaker = 'Literature';
+        }
+        currentParagraphs.push(line);
+      }
+    }
+    commitTurn();
+
+    if (turns.length === 0 && dialogueText.trim()) {
+      turns.push({ speaker: 'Literature', text: dialogueText.trim() });
+    }
+
+    const uniqueSpeakerNames = Array.from(new Set(turns.map(t => t.speaker)));
+    const totalWords = turns.reduce((acc, t) => acc + (t.text.split(/\s+/).filter(Boolean).length), 0);
+
+    let mode = 'literature';
+    let modeLabel = '📖 Literature / Story Narration';
+    let recommendedStyle = 'Rich, expressive literary narration with measured storytelling pauses';
+
+    if (uniqueSpeakerNames.length === 1 && uniqueSpeakerNames[0] === 'Literature') {
+      mode = 'literature';
+      modeLabel = '📖 Literature / Story Narration';
+      recommendedStyle = 'Rich, expressive literary narration with measured storytelling pauses';
+    } else if (uniqueSpeakerNames.length === 1) {
+      mode = 'monologue';
+      const spk = uniqueSpeakerNames[0];
+      modeLabel = `🎙️ 1 Person Talking (${spk})`;
+      recommendedStyle = 'Clear, engaging solo monologue with natural vocal inflection';
+    } else if (uniqueSpeakerNames.length === 2) {
+      mode = 'dialogue';
+      modeLabel = `💬 2 Persons Talking (${uniqueSpeakerNames[0]} & ${uniqueSpeakerNames[1]})`;
+      recommendedStyle = 'Warm, natural conversational English with dynamic dialogue turns and lifelike pauses';
+    } else {
+      mode = 'multi_speaker';
+      const isExam = uniqueSpeakerNames.some(s => /Speaker\s*\d+/i.test(s));
+      modeLabel = isExam
+        ? `🎧 ${uniqueSpeakerNames.length} Exam Speakers`
+        : `👥 ${uniqueSpeakerNames.length} People Talking`;
+      recommendedStyle = 'Clear, natural enunciation for Cambridge English listening comprehension exams, with distinct pauses between speakers';
+    }
+
+    const femaleVoicePool = ['Aoede', 'Kore'];
+    const maleVoicePool = ['Puck', 'Fenrir', 'Charon', 'Zephyr'];
+    let femaleIdx = 0;
+    let maleIdx = 0;
+
+    const speakers = uniqueSpeakerNames.map((spkName, idx) => {
+      const spkTurns = turns.filter(t => t.speaker === spkName);
+      const spkWords = spkTurns.reduce((acc, t) => acc + (t.text.split(/\s+/).filter(Boolean).length), 0);
+      const sampleText = spkTurns.map(t => t.text).join(' ');
+
+      let gender = 'neutral';
+      let voice = 'Puck';
+
+      if (spkName === 'Literature') {
+        gender = 'narrator';
+        voice = 'Charon';
+      } else {
+        const detected = detectGender(spkName, sampleText);
+        if (detected !== 'neutral') {
+          gender = detected;
+        } else {
+          // Alternating balanced heuristic for generic names: Male, Female, Female, Male...
+          gender = (idx % 2 === 1) ? 'female' : 'male';
+        }
+
+        if (gender === 'female') {
+          voice = femaleVoicePool[femaleIdx % femaleVoicePool.length];
+          femaleIdx++;
+        } else {
+          voice = maleVoicePool[maleIdx % maleVoicePool.length];
+          maleIdx++;
+        }
+      }
+
+      return {
+        id: `spk_${idx}`,
+        name: spkName === 'Literature' ? 'Narrator' : spkName,
+        gender,
+        voice,
+        turnsCount: spkTurns.length,
+        wordsCount: spkWords
+      };
+    });
+
+    return {
+      mode,
+      modeLabel,
+      recommendedStyle,
+      speakers,
+      turns,
+      stats: { totalWords, totalTurns: turns.length, uniqueSpeakers: speakers.length }
+    };
+  }
+
+  function renderVoiceOptions(activeVoice) {
+    const femaleVoices = GEMINI_VOICES.filter(v => v.gender === 'female');
+    const maleVoices = GEMINI_VOICES.filter(v => v.gender === 'male');
+
+    return `
+      <optgroup label="🌸 Female Voices">
+        ${femaleVoices.map(v => `<option value="${v.id}" ${v.id === activeVoice ? 'selected' : ''}>${v.name}</option>`).join('')}
+      </optgroup>
+      <optgroup label="🌲 Male Voices">
+        ${maleVoices.map(v => `<option value="${v.id}" ${v.id === activeVoice ? 'selected' : ''}>${v.name}</option>`).join('')}
+      </optgroup>
+    `;
+  }
+
+  function renderSmartSpeakerConfig() {
+    if (!speakersGrid || !scriptTextInput) return;
+    const text = scriptTextInput.value;
+    const analysis = analyzeScriptContext(text);
+
+    if (analysis.mode === 'empty') {
+      smartDetectionText.textContent = 'Smart Detection: Ready';
+      smartContextBar.classList.add('hidden');
+      speakerCountBadge.textContent = 'Auto-Configured';
+    } else {
+      smartDetectionText.textContent = analysis.modeLabel;
+      smartContextBar.classList.remove('hidden');
+      smartModePill.textContent = analysis.modeLabel;
+      smartStatsPill.textContent = `${analysis.stats.totalTurns} ${analysis.stats.totalTurns === 1 ? 'part' : 'parts'} • ${analysis.stats.totalWords} words`;
+      speakerCountBadge.textContent = `${analysis.speakers.length} ${analysis.speakers.length === 1 ? 'Voice' : 'Voices'} Assigned`;
+
+      smartSpeakersQuickList.innerHTML = analysis.speakers.map(s => {
+        const activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+        const activeGender = speakerGenderOverrides[s.name] || s.gender;
+        const icon = activeGender === 'female' ? '♀' : activeGender === 'male' ? '♂' : '📖';
+        return `<span class="smart-quick-pill gender-${activeGender}">${icon} ${s.name}: ${activeVoice}</span>`;
+      }).join('');
+    }
+
+    if (analysis.recommendedStyle && !userHasCustomizedStyle) {
+      deliveryStyleInput.value = analysis.recommendedStyle;
+    }
+
+    speakersGrid.innerHTML = '';
+
+    if (analysis.speakers.length === 0) {
+      speakersGrid.innerHTML = `
+        <div class="speaker-card">
+          <div class="speaker-card-header">
+            <span class="speaker-name-badge">🎙️ Speaker 1 (Default)</span>
+            <span class="gender-toggle-btn gender-male">♂ Male</span>
+          </div>
+          <div class="select-wrapper">
+            <select class="form-select speaker-voice-select" data-speaker="Speaker 1">
+              ${renderVoiceOptions('Puck')}
+            </select>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    analysis.speakers.forEach(s => {
+      const activeVoice = speakerVoiceOverrides[s.name] || s.voice;
+      const activeGender = speakerGenderOverrides[s.name] || s.gender;
+      const genderIcon = activeGender === 'female' ? '♀ Female' : activeGender === 'male' ? '♂ Male' : '📖 Narrator';
+      const cardTitle = s.name === 'Narrator' ? '📖 Literature Narrator' : s.name;
+
+      const card = document.createElement('div');
+      card.className = 'speaker-card';
+      card.innerHTML = `
+        <div class="speaker-card-header">
+          <span class="speaker-name-badge" title="${s.name}">${cardTitle}</span>
+          <button type="button" class="gender-toggle-btn gender-${activeGender}" data-speaker="${s.name}" title="Click to toggle gender">
+            ${genderIcon}
+          </button>
+        </div>
+        <div class="select-wrapper">
+          <select class="form-select speaker-voice-select" data-speaker="${s.name}">
+            ${renderVoiceOptions(activeVoice)}
+          </select>
+        </div>
+        <div class="speaker-stats">
+          <span>${s.turnsCount} ${s.turnsCount === 1 ? 'part' : 'parts'}</span>
+          <span>${s.wordsCount} words</span>
+        </div>
+      `;
+
+      const toggleBtn = card.querySelector('.gender-toggle-btn');
+      toggleBtn.addEventListener('click', () => {
+        let newGender = 'female';
+        if (activeGender === 'female') newGender = 'male';
+        else if (activeGender === 'male') newGender = 'female';
+        else newGender = 'female';
+
+        speakerGenderOverrides[s.name] = newGender;
+        if (newGender === 'female') {
+          speakerVoiceOverrides[s.name] = 'Aoede';
+        } else {
+          speakerVoiceOverrides[s.name] = 'Puck';
+        }
+        renderSmartSpeakerConfig();
+      });
+
+      const select = card.querySelector('.speaker-voice-select');
+      select.addEventListener('change', (e) => {
+        speakerVoiceOverrides[s.name] = e.target.value;
+        const vObj = GEMINI_VOICES.find(v => v.id === e.target.value);
+        if (vObj) {
+          speakerGenderOverrides[s.name] = vObj.gender;
+        }
+        renderSmartSpeakerConfig();
+      });
+
+      speakersGrid.appendChild(card);
+    });
+  }
+
   // --- ADVANCED SCRIPT & ANSWER KEY PARSER ---
   function parseInputScript(rawInput) {
-    let dialogueText = rawInput;
-    let answerKey = [];
+    const analysis = analyzeScriptContext(rawInput);
+    const answerKey = [];
 
-    // 1. Separate Answer Key block if present
-    const akRegex = /(?:^|\n)\s*(?:[*#\-_]{0,3})\s*Answer\s*Key\s*:?[\s*#\-_]*/i;
+    const akRegex = /(?:^|\n)\s*(?:[*#\-_]{0,3})\s*(?:Answer\s*Key|Answers|Teacher'?s?\s*Key|Questions)\s*:?[\s*#\-_]*/i;
     const akMatch = rawInput.match(akRegex);
-    if (akMatch) {
+    if (akMatch && akMatch.index > 50) {
       const splitIndex = akMatch.index;
-      dialogueText = rawInput.slice(0, splitIndex).trim();
       const answerKeyBlock = rawInput.slice(splitIndex + akMatch[0].length).trim();
-      
       const lines = answerKeyBlock.split('\n').map(l => l.trim()).filter(Boolean);
       lines.forEach(line => {
         const clean = line.replace(/^[\*\-\d\.\s]+/, '');
@@ -818,56 +1207,21 @@ Maya: Perfect, there we go. Thank you so much!`,
       });
     }
 
-    // 2. Parse Dialogue sections (supports **Speaker 1**, Speaker 1:, or multi-line paragraphs)
-    const turns = [];
-    const lines = dialogueText.split('\n').map(l => l.trim());
-    let currentSpeaker = 'Speaker 1';
-    let currentParagraphs = [];
-
-    function commitTurn() {
-      if (currentParagraphs.length > 0) {
-        const cleanText = currentParagraphs.join(' ').replace(/[*_#]/g, '').trim();
-        if (cleanText) {
-          turns.push({
-            speaker: currentSpeaker,
-            text: cleanText
-          });
-        }
-        currentParagraphs = [];
-      }
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line || line === '---' || line === '***' || line === '___') {
-        continue;
-      }
-
-      // Check if line is a speaker header: **Speaker 1**, # Speaker 1, Speaker 1:, [Speaker 1]
-      const headerMatch = line.match(/^(?:[*#\-_\[\s]{0,3})\s*(Speaker\s*\d+|Narrator|[A-Z][a-zA-Z0-9_\s]{1,24})\s*(?:[*#\-_\]\s]{0,3}):?\s*(.*)$/i);
-      
-      if (headerMatch && (!headerMatch[2] || headerMatch[2].length < 60)) {
-        commitTurn();
-        currentSpeaker = headerMatch[1].replace(/[*_]/g, '').trim();
-        if (headerMatch[2]) {
-          currentParagraphs.push(headerMatch[2]);
-        }
-      } else {
-        currentParagraphs.push(line);
-      }
-    }
-    commitTurn();
-
-    return { turns, answerKey };
+    return { turns: analysis.turns, answerKey, analysis };
   }
 
   // --- GEMINI 3.8 TTS SYNTHESIS ENGINE (1, 2, or Any Number of Speakers) ---
   async function callGeminiTts(turns, styleDirection) {
     const uniqueSpeakers = Array.from(new Set(turns.map(t => t.speaker)));
-    const voice1 = voice1Select.value;
-    const voice2 = voice2Select.value;
-    const voice3 = voice3Select.value;
-    const voiceChoices = [voice1, voice2, voice3, 'Fenrir', 'Zephyr', 'Kore', 'Puck', 'Aoede', 'Charon'];
+
+    function getSpeakerVoice(spkName, fallbackIndex) {
+      if (speakerVoiceOverrides[spkName]) return speakerVoiceOverrides[spkName];
+      const select = document.querySelector(`.speaker-voice-select[data-speaker="${spkName}"]`);
+      if (select && select.value) return select.value;
+      const defaultVoices = ['Puck', 'Aoede', 'Kore', 'Fenrir', 'Charon', 'Zephyr'];
+      return defaultVoices[fallbackIndex % defaultVoices.length];
+    }
+
     const model = ttsModelSelect.value || 'gemini-3.1-flash-tts-preview';
 
     // Helper: Single speaker API request with auto-retry and model fallback
@@ -976,10 +1330,10 @@ Maya: Perfect, there we go. Thank you so much!`,
       throw new Error('Gemini TTS returned no audio data.');
     }
 
-    // CASE 1: Single Speaker
+    // CASE 1: Single Speaker (Literature or Monologue)
     if (uniqueSpeakers.length === 1) {
       const fullText = turns.map(t => t.text).join('\n\n');
-      const voice = voiceChoices[0];
+      const voice = getSpeakerVoice(uniqueSpeakers[0], 0);
       setGenerationStatus(`Synthesizing monologue with voice: ${voice}...`);
       const b64 = await requestSingleSpeakerAudio(fullText, voice, uniqueSpeakers[0]);
       const bytes = base64ToUint8Array(b64);
@@ -990,10 +1344,12 @@ Maya: Perfect, there we go. Thank you so much!`,
     // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request with fallback)
     if (uniqueSpeakers.length === 2) {
       try {
-        setGenerationStatus(`Synthesizing 2-speaker dialogue with ${voiceChoices[0]} and ${voiceChoices[1]}...`);
+        const voiceA = getSpeakerVoice(uniqueSpeakers[0], 0);
+        const voiceB = getSpeakerVoice(uniqueSpeakers[1], 1);
+        setGenerationStatus(`Synthesizing 2-speaker dialogue with ${uniqueSpeakers[0]} (${voiceA}) and ${uniqueSpeakers[1]} (${voiceB})...`);
         const speakerConfigs = [
-          { speaker: uniqueSpeakers[0], voice: voiceChoices[0] },
-          { speaker: uniqueSpeakers[1], voice: voiceChoices[1] }
+          { speaker: uniqueSpeakers[0], voice: voiceA },
+          { speaker: uniqueSpeakers[1], voice: voiceB }
         ];
 
         const contentItems = turns.map(t => ({
@@ -1072,7 +1428,7 @@ Maya: Perfect, there we go. Thank you so much!`,
     for (let i = 0; i < turns.length; i++) {
       const turn = turns[i];
       const spkIdx = uniqueSpeakers.indexOf(turn.speaker);
-      const voice = voiceChoices[spkIdx >= 0 ? spkIdx % voiceChoices.length : 0];
+      const voice = getSpeakerVoice(turn.speaker, spkIdx >= 0 ? spkIdx : i);
 
       setGenerating(true, `Synthesizing ${turn.speaker} (${i + 1}/${turns.length}) with voice: ${voice}...`);
       const b64 = await requestSingleSpeakerAudio(turn.text, voice, turn.speaker);
@@ -1488,6 +1844,17 @@ Return strictly valid JSON:
     saveKeyBtn.addEventListener('click', saveApiKey);
     apiKeyInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') saveApiKey();
+    });
+
+    // Smart Script Input Listeners
+    scriptTextInput.addEventListener('input', () => {
+      renderSmartSpeakerConfig();
+    });
+    scriptTextInput.addEventListener('paste', () => {
+      setTimeout(renderSmartSpeakerConfig, 50);
+    });
+    deliveryStyleInput.addEventListener('input', () => {
+      userHasCustomizedStyle = true;
     });
 
     // Action Generate Dispatcher
