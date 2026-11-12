@@ -1226,21 +1226,19 @@ Maya: Perfect, there we go. Thank you so much!`,
 
     // Helper: Single speaker API request with auto-retry and model fallback
     async function requestSingleSpeakerAudio(textToSpeak, voiceName, speakerLabel, activeModel = model) {
-      const annotations = [];
       const cleanStyle = (styleDirection || '').trim();
-      if (cleanStyle) {
-        annotations.push({
-          type: 'speech_metadata',
-          style: cleanStyle
-        });
-      }
-
       const contentItem = {
         type: 'text',
         text: textToSpeak
       };
-      if (annotations.length > 0) {
-        contentItem.annotations = annotations;
+
+      // Note: Only Gemini 3.8 models support speech_metadata annotations.
+      // Gemini 3.1-flash-tts-preview rejects annotations with "Speech metadata is not supported for this model".
+      if (cleanStyle && activeModel.includes('3.8')) {
+        contentItem.annotations = [{
+          type: 'speech_metadata',
+          style: cleanStyle
+        }];
       }
 
       const payload = {
@@ -1280,6 +1278,14 @@ Maya: Perfect, there we go. Thank you so much!`,
 
         const errJson = await res.json().catch(() => ({}));
         const errMsg = errJson.error?.message || `TTS HTTP ${res.status}: ${res.statusText}`;
+
+        // If Speech metadata is rejected, immediately strip annotations and retry
+        if (errMsg.includes('Speech metadata') || errMsg.includes('speech_metadata')) {
+          console.warn('Speech metadata not supported for this model, retrying without annotations...');
+          delete contentItem.annotations;
+          payload.input[0].content[0] = { type: 'text', text: textToSpeak };
+          continue;
+        }
 
         // 1. If 429 on 3.8 / 3.8-lite, seamlessly switch to 3.1
         if (res.status === 429 && activeModel !== 'gemini-3.1-flash-tts-preview') {
@@ -1346,8 +1352,8 @@ Maya: Perfect, there we go. Thank you so much!`,
       return { blob, objectUrl: URL.createObjectURL(blob), base64: b64 };
     }
 
-    // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request with fallback)
-    if (uniqueSpeakers.length === 2) {
+    // CASE 2: Exactly 2 Speakers (Native Gemini 2-speaker multi-speaker request for 3.8 models, with multi-track fallback)
+    if (uniqueSpeakers.length === 2 && model.includes('3.8')) {
       try {
         const voiceA = getSpeakerVoice(uniqueSpeakers[0], 0);
         const voiceB = getSpeakerVoice(uniqueSpeakers[1], 1);
